@@ -20,7 +20,7 @@ struct SyncOneRequest {
     path: std::path::PathBuf,
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument]
 fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Result<()> {
     let status = process::Command::new("rsync")
         .args(flags.iter())
@@ -48,6 +48,7 @@ fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Res
     };
 
     if initialize {
+        debug!("Running init commands");
         for cmd in s.on_init.iter() {
             run(cmd);
         }
