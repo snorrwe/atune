@@ -24,15 +24,7 @@ struct SyncOneRequest {
 }
 
 #[tracing::instrument(skip_all)]
-fn execute_sync<'a, S, C>(
-    s: &FileSync,
-    flags: &[String],
-    on_sync: impl Iterator<Item = C>,
-) -> anyhow::Result<()>
-where
-    S: std::convert::AsRef<std::ffi::OsStr>,
-    C: AsRef<[S]>,
-{
+fn execute_sync(s: &FileSync, flags: &[String]) -> anyhow::Result<()> {
     let status = process::Command::new("rsync")
         .args(flags.iter())
         .arg(s.src.as_os_str())
@@ -45,10 +37,10 @@ where
     anyhow::ensure!(status.success(), "Failed to sync files");
 
     debug!("Running on_sync commands");
-    for cmd in on_sync {
-        let cmd = cmd.as_ref();
-        process::Command::new(cmd[0].as_ref())
-            .args(&cmd[1..])
+    for cmd in s.on_sync.iter() {
+        process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
             .env("ATUNE_SYNC_SRC", s.src.to_string_lossy().as_ref())
             .env("ATUNE_SYNC_DST", s.dst.to_string_lossy().as_ref())
             .spawn()
@@ -101,15 +93,8 @@ fn sync_files(
     tx: channel::Sender<()>,
     debounce: Duration,
 ) {
-    let on_sync = files
-        .iter()
-        .flat_map(|(s, _)| s.on_sync.iter())
-        .map(|s| shell_words::split(s).unwrap())
-        .filter(|c| !c.is_empty())
-        .collect::<Vec<_>>();
-
     for (f, flags) in files.iter() {
-        if let Err(err) = execute_sync(f, flags, on_sync.iter()) {
+        if let Err(err) = execute_sync(f, flags) {
             error!(?err, "Failed to perform initial sync");
         }
     }
@@ -145,7 +130,7 @@ fn sync_files(
         for a in to_sync.drain() {
             let (s, flags) = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
-            if let Err(err) = execute_sync(s, flags, on_sync.iter()) {
+            if let Err(err) = execute_sync(s, flags) {
                 error!(?err, "Failed to sync files");
             }
         }
