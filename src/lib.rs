@@ -44,6 +44,7 @@ where
 
     anyhow::ensure!(status.success(), "Failed to sync files");
 
+    debug!("Running on_sync commands");
     for cmd in on_sync {
         let cmd = cmd.as_ref();
         process::Command::new(cmd[0].as_ref())
@@ -55,6 +56,7 @@ where
             .wait()
             .unwrap();
     }
+    debug!("Running on_sync commands done");
     Ok(())
 }
 
@@ -97,6 +99,7 @@ fn sync_files(
     files: Vec<(config::FileSync, FlagsParsed)>,
     rx: channel::Receiver<SyncOneRequest>,
     tx: channel::Sender<()>,
+    debounce: Duration,
 ) {
     let on_sync = files
         .iter()
@@ -116,18 +119,34 @@ fn sync_files(
         .map(|s| (std::fs::canonicalize(s.0.src.as_path()).unwrap(), s))
         .collect::<HashMap<_, _>>();
 
+    let mut to_sync = HashSet::new();
     loop {
         let Ok(req) = rx.recv() else {
             break;
         };
         let path = &req.path;
         for a in path.ancestors() {
-            if let Some((s, flags)) = files.get(a) {
-                info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
-                if let Err(err) = execute_sync(s, flags, on_sync.iter()) {
-                    error!(?err, "Failed to sync files");
-                }
+            if files.contains_key(a) {
+                to_sync.insert(a.to_owned());
                 break;
+            }
+        }
+        std::thread::sleep(debounce);
+        for req in rx.try_iter() {
+            let path = &req.path;
+            for a in path.ancestors() {
+                if files.contains_key(a) {
+                    to_sync.insert(a.to_owned());
+                    break;
+                }
+            }
+        }
+
+        for a in to_sync.drain() {
+            let (s, flags) = files[&a];
+            info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
+            if let Err(err) = execute_sync(s, flags, on_sync.iter()) {
+                error!(?err, "Failed to sync files");
             }
         }
         if let Err(err) = tx.send(()) {
@@ -172,7 +191,7 @@ fn watch_project<'a>(
     let (one_tx, one_rx) = channel::bounded(1024);
     let (onsync_tx, onsync_rx) = channel::bounded(1024);
 
-    s.spawn(move || sync_files(sync, one_rx, onsync_tx));
+    s.spawn(move || sync_files(sync, one_rx, onsync_tx, debounce));
     s.spawn(move || on_sync(onsync_rx, project.on_sync, debounce));
 
     let mut files = HashSet::new();
@@ -191,21 +210,6 @@ fn watch_project<'a>(
                 files.extend(ev.paths);
             }
             _ => continue,
-        }
-        std::thread::sleep(debounce);
-
-        // collect events received while asleep to batch updates
-        loop {
-            match rx.try_recv() {
-                Ok(Ok(ev)) => {
-                    files.extend(ev.paths);
-                }
-                Ok(Err(_)) => {
-                    break 'rx;
-                }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => break 'rx,
-            }
         }
         debug!(?files, "received file updates");
         for f in files.drain() {
