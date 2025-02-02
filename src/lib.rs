@@ -42,20 +42,20 @@ fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Res
             .env("ATUNE_SYNC_SRC", s.src.as_os_str())
             .env("ATUNE_SYNC_DST", s.dst.as_os_str())
             .spawn()
-            .expect("Failed to spawn on_sync command")
+            .context("Failed to spawn on_sync command")?
             .wait()
-            .unwrap();
+            .context("Failed to wait for child")
     };
 
     if initialize {
         debug!("Running init commands");
         for cmd in s.on_init.iter() {
-            run(cmd);
+            run(cmd)?;
         }
     }
 
     for cmd in s.on_sync.iter() {
-        run(cmd);
+        run(cmd)?;
     }
     debug!("Running on_sync commands done");
     Ok(())
