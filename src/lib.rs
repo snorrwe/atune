@@ -82,7 +82,7 @@ fn sync_files(
 
     let files = files
         .iter()
-        .map(|s| (s.0.src.as_path(), s))
+        .map(|s| (std::fs::canonicalize(s.0.src.as_path()).unwrap(), s))
         .collect::<HashMap<_, _>>();
 
     loop {
