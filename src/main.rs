@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::Parser as _;
 use clap_derive::Parser;
+use clap_derive::Subcommand;
 use signal_hook::{
     consts::{SIGINT, SIGQUIT, SIGTERM},
     iterator::Signals,
@@ -9,9 +10,24 @@ use tracing::{debug, warn};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[derive(Debug, Parser)]
+#[command(version, about, long_about = None)]
 struct Args {
-    #[arg(long, short, env("ATUNE_CONFIG_PATH"), default_value("./atune.toml"))]
+    #[arg(
+        long,
+        short,
+        env("ATUNE_CONFIG_PATH"),
+        default_value("./atune.toml"),
+        value_name = "FILE"
+    )]
     config: std::path::PathBuf,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    Watch,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -36,19 +52,23 @@ fn main() -> anyhow::Result<()> {
 
     debug!(?config, "loaded config");
 
-    let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
+    match args.command {
+        Command::Watch => {
+            let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
-    std::thread::spawn(move || match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
-        Ok(mut signals) => {
-            for sig in signals.wait() {
-                println!("Signal ({sig}) received. Stopping...");
-                cancel_tx.send(()).unwrap();
-            }
-        }
-        Err(err) => {
-            warn!(?err, "Failed to register ctrl+c handler");
-        }
-    });
+            std::thread::spawn(move || match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
+                Ok(mut signals) => {
+                    for sig in signals.wait() {
+                        println!("Signal ({sig}) received. Stopping...");
+                        cancel_tx.send(()).unwrap();
+                    }
+                }
+                Err(err) => {
+                    warn!(?err, "Failed to register ctrl+c handler");
+                }
+            });
 
-    atune::run(config, cancel_rx)
+            atune::watch(config, cancel_rx)
+        }
+    }
 }

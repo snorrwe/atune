@@ -208,7 +208,7 @@ fn watch_project<'a>(
 }
 
 /// Continously watch the config for changes as sync
-pub fn run(
+pub fn watch(
     config: Config,
     cancel: impl Into<Option<crossbeam::channel::Receiver<()>>>,
 ) -> anyhow::Result<()> {

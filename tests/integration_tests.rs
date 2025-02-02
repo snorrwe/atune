@@ -41,7 +41,7 @@ fn test_watch_syncs() {
     let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
     assert!(!out.exists());
-    let watch = std::thread::spawn(move || atune::run(config, cancel_rx));
+    let watch = std::thread::spawn(move || atune::watch(config, cancel_rx));
 
     std::thread::sleep(Duration::from_millis(500));
 
