@@ -172,6 +172,7 @@
           packages = with pkgs; [
             just
             git-cliff
+            lldb
           ];
         };
       }
