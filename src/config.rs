@@ -4,6 +4,7 @@ use std::{path::PathBuf, time::Duration};
 pub struct Config {
     pub project: Vec<Project>,
     #[serde(default = "default_debounce")]
+    #[serde(deserialize_with = "duration_str::deserialize_duration")]
     pub debounce: Duration,
 }
 
@@ -53,6 +54,7 @@ mod tests {
     #[test]
     fn test_mixed_watch() {
         let toml = r#"
+debounce = "1s 30ms"
 [[project]]
 [[project.sync]]
 src = "asd"
@@ -63,5 +65,6 @@ dst = "remote:~/asd"
 
         assert_eq!(config.project[0].sync[0].src.as_os_str(), "asd");
         assert_eq!(config.project[0].sync[0].dst.as_os_str(), "remote:~/asd");
+        assert_eq!(config.debounce, Duration::from_millis(1030));
     }
 }
