@@ -103,6 +103,7 @@ fn sync_files(
                     break;
                 }
 
+                debug!(path=?a, "Running path on_sync commands");
                 for cmd in on_sync.iter() {
                     process::Command::new(cmd[0].as_str())
                         .args(&cmd[1..])
@@ -114,6 +115,7 @@ fn sync_files(
                         .wait()
                         .unwrap();
                 }
+                debug!(path=?a, "Running path on_sync commands done");
 
                 break;
             }
