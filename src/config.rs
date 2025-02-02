@@ -41,6 +41,9 @@ pub struct FileSync {
     /// commands to run after sync
     #[serde(default)]
     pub on_sync: Vec<String>,
+    /// commands to run after the first sync
+    #[serde(default)]
+    pub on_init: Vec<String>,
 }
 
 fn default_recursive() -> bool {

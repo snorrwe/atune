@@ -21,7 +21,7 @@ struct SyncOneRequest {
 }
 
 #[tracing::instrument(skip_all)]
-fn execute_sync(s: &FileSync, flags: &[String]) -> anyhow::Result<()> {
+fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Result<()> {
     let status = process::Command::new("rsync")
         .args(flags.iter())
         .arg(s.src.as_os_str())
@@ -34,7 +34,8 @@ fn execute_sync(s: &FileSync, flags: &[String]) -> anyhow::Result<()> {
     anyhow::ensure!(status.success(), "Failed to sync files");
 
     debug!("Running on_sync commands");
-    for cmd in s.on_sync.iter() {
+
+    let run = |cmd: &str| {
         process::Command::new("sh")
             .arg("-c")
             .arg(cmd)
@@ -44,6 +45,16 @@ fn execute_sync(s: &FileSync, flags: &[String]) -> anyhow::Result<()> {
             .expect("Failed to spawn on_sync command")
             .wait()
             .unwrap();
+    };
+
+    if initialize {
+        for cmd in s.on_init.iter() {
+            run(cmd);
+        }
+    }
+
+    for cmd in s.on_sync.iter() {
+        run(cmd);
     }
     debug!("Running on_sync commands done");
     Ok(())
@@ -83,7 +94,7 @@ fn sync_files(
     debounce: Duration,
 ) {
     for (f, flags) in files.iter() {
-        if let Err(err) = execute_sync(f, flags) {
+        if let Err(err) = execute_sync(f, flags, true) {
             error!(?err, "Failed to perform initial sync");
         }
     }
@@ -119,7 +130,7 @@ fn sync_files(
         for a in to_sync.drain() {
             let (s, flags) = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
-            if let Err(err) = execute_sync(s, flags) {
+            if let Err(err) = execute_sync(s, flags, false) {
                 error!(?err, "Failed to sync files");
             }
         }
