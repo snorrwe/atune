@@ -9,10 +9,7 @@ use std::{
 
 use anyhow::Context;
 use config::FileSync;
-use crossbeam::{
-    channel::{self, TryRecvError},
-    select,
-};
+use crossbeam::{channel, select};
 use notify::Watcher;
 use tracing::{debug, error, info, warn};
 
@@ -53,25 +50,17 @@ fn execute_sync(s: &FileSync, flags: &[String]) -> anyhow::Result<()> {
 }
 
 #[tracing::instrument(skip_all)]
-fn on_sync(rx: channel::Receiver<()>, commands: Vec<String>, debounce: Duration) {
+fn on_sync(rx: channel::Receiver<()>, commands: Vec<String>) {
     let on_sync = commands
         .iter()
         .map(|s| shell_words::split(s).unwrap())
         .filter(|c| !c.is_empty())
         .collect::<Vec<_>>();
 
-    'rx: loop {
+    loop {
         let Ok(_) = rx.recv() else { break };
-        debug!(?debounce, "on_sync event received, waiting...");
-        std::thread::sleep(debounce);
-        // collect events received while asleep to batch updates
-        loop {
-            match rx.try_recv() {
-                Ok(_) => {}
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => break 'rx,
-            }
-        }
+        // collect all events received to batch updates
+        for _res in rx.try_iter() {}
         debug!("running on_sync project commands");
         for cmd in on_sync.iter() {
             process::Command::new(cmd[0].as_str())
@@ -177,7 +166,7 @@ fn watch_project<'a>(
     let (onsync_tx, onsync_rx) = channel::bounded(1024);
 
     s.spawn(move || sync_files(sync, one_rx, onsync_tx, debounce));
-    s.spawn(move || on_sync(onsync_rx, project.on_sync, debounce));
+    s.spawn(move || on_sync(onsync_rx, project.on_sync));
 
     let mut files = HashSet::new();
     'rx: loop {
