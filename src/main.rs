@@ -56,19 +56,23 @@ fn main() -> anyhow::Result<()> {
         Command::Watch => {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
-            std::thread::spawn(move || match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
+            let h = std::thread::spawn(|| atune::watch(config, cancel_rx));
+            match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
                     for sig in signals.wait() {
                         println!("Signal ({sig}) received. Stopping...");
                         cancel_tx.send(()).unwrap();
+                        h.join()
+                            .expect("Failed to join watch thread")
+                            .expect("Watch error");
+                        break;
                     }
                 }
                 Err(err) => {
-                    warn!(?err, "Failed to register ctrl+c handler");
+                    warn!(?err, "Failed to register signal handler");
                 }
-            });
-
-            atune::watch(config, cancel_rx)
+            }
+            Ok(())
         }
     }
 }
