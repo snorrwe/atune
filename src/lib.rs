@@ -4,27 +4,67 @@ use crate::config::Config;
 use std::{
     collections::{HashMap, HashSet},
     io::Write,
+    path::PathBuf,
     process::{self, Stdio},
     time::Duration,
 };
 
 use anyhow::Context;
-use config::FileSync;
 use crossbeam::{channel, select};
 use notify::Watcher;
 use tracing::{debug, error, info, warn};
-
-type FlagsParsed = Vec<String>;
 
 #[derive(Debug)]
 struct SyncOneRequest {
     path: std::path::PathBuf,
 }
 
+#[derive(Debug)]
+pub struct ParsedProject {
+    pub sync: Vec<ParsedSync>,
+    pub on_sync: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct ParsedSync {
+    pub src: PathBuf,
+    pub recursive: bool,
+    pub dst: PathBuf,
+    pub rsync_flags: Vec<String>,
+    pub on_sync: Vec<String>,
+    pub on_init: Vec<String>,
+}
+
+impl TryFrom<config::Project> for ParsedProject {
+    type Error = anyhow::Error;
+
+    fn try_from(value: config::Project) -> Result<Self, Self::Error> {
+        let mut sync = Vec::with_capacity(value.sync.len());
+        for s in value.sync {
+            sync.push(ParsedSync {
+                src: s.src,
+                recursive: s.recursive,
+                dst: s.dst,
+                rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
+                    shell_words::split(flags).context("Failed to split rsync flags")?
+                } else {
+                    vec!["--delete".to_owned(), "-ra".to_owned()]
+                },
+                on_sync: s.on_sync,
+                on_init: s.on_init,
+            });
+        }
+        anyhow::Ok(Self {
+            sync,
+            on_sync: value.on_sync,
+        })
+    }
+}
+
 #[tracing::instrument]
-fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Result<()> {
+fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
     let status = process::Command::new("rsync")
-        .args(flags.iter())
+        .args(s.rsync_flags.iter())
         .arg(s.src.as_os_str())
         .arg(s.dst.as_os_str())
         .spawn()
@@ -94,20 +134,20 @@ fn on_sync(rx: channel::Receiver<()>, commands: Vec<String>) {
 
 #[tracing::instrument(skip_all)]
 fn sync_files(
-    files: Vec<(config::FileSync, FlagsParsed)>,
+    files: Vec<ParsedSync>,
     rx: channel::Receiver<SyncOneRequest>,
     tx: channel::Sender<()>,
     debounce: Duration,
 ) {
-    for (f, flags) in files.iter() {
-        if let Err(err) = execute_sync(f, flags, true) {
+    for f in files.iter() {
+        if let Err(err) = execute_sync(f, true) {
             error!(?err, "Failed to perform initial sync");
         }
     }
 
     let files = files
         .iter()
-        .map(|s| (std::fs::canonicalize(s.0.src.as_path()).unwrap(), s))
+        .map(|s| (std::fs::canonicalize(s.src.as_path()).unwrap(), s))
         .collect::<HashMap<_, _>>();
 
     let mut to_sync = HashSet::new();
@@ -134,9 +174,9 @@ fn sync_files(
         }
 
         for a in to_sync.drain() {
-            let (s, flags) = files[&a];
+            let s = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
-            if let Err(err) = execute_sync(s, flags, false) {
+            if let Err(err) = execute_sync(s, false) {
                 error!(?err, "Failed to sync files");
             }
         }
@@ -153,19 +193,11 @@ fn watch_project<'a>(
     debounce: Duration,
     cancel: crossbeam::channel::Receiver<()>,
 ) -> anyhow::Result<()> {
-    let mut sync = Vec::with_capacity(project.sync.len());
-    for f in project.sync.into_iter() {
-        let flags = if let Some(flags) = f.rsync_flags.as_deref() {
-            shell_words::split(flags).context("Failed to split rsync flags")?
-        } else {
-            vec!["--delete".to_owned(), "-ra".to_owned()]
-        };
-        sync.push((f, flags));
-    }
+    let project: ParsedProject = project.try_into().context("Failed to parse config")?;
 
     let (tx, rx) = channel::unbounded();
 
-    for (p, _) in sync.iter() {
+    for p in project.sync.iter() {
         let mut watcher =
             notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
         debug!(path=?p, "Registering");
@@ -182,7 +214,7 @@ fn watch_project<'a>(
     let (one_tx, one_rx) = channel::bounded(1024);
     let (onsync_tx, onsync_rx) = channel::bounded(1024);
 
-    std::thread::spawn(move || sync_files(sync, one_rx, onsync_tx, debounce));
+    std::thread::spawn(move || sync_files(project.sync, one_rx, onsync_tx, debounce));
     std::thread::spawn(move || on_sync(onsync_rx, project.on_sync));
 
     let mut files = HashSet::new();
