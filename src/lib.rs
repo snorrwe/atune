@@ -149,7 +149,6 @@ fn sync_files(
 
 #[tracing::instrument(skip_all)]
 fn watch_project<'a>(
-    s: &'a std::thread::Scope<'a, '_>,
     project: config::Project,
     debounce: Duration,
     cancel: crossbeam::channel::Receiver<()>,
@@ -182,8 +181,8 @@ fn watch_project<'a>(
     let (one_tx, one_rx) = channel::bounded(1024);
     let (onsync_tx, onsync_rx) = channel::bounded(1024);
 
-    s.spawn(move || sync_files(sync, one_rx, onsync_tx, debounce));
-    s.spawn(move || on_sync(onsync_rx, project.on_sync));
+    std::thread::spawn(move || sync_files(sync, one_rx, onsync_tx, debounce));
+    std::thread::spawn(move || on_sync(onsync_rx, project.on_sync));
 
     let mut files = HashSet::new();
     'rx: loop {
@@ -218,24 +217,21 @@ pub fn watch(
     config: Config,
     cancel: impl Into<Option<crossbeam::channel::Receiver<()>>>,
 ) -> anyhow::Result<()> {
-    std::thread::scope(|s| {
-        let mut project_cancel = Vec::with_capacity(config.project.len());
-        for project in config.project {
-            let (tx, rx) = crossbeam::channel::bounded(1);
-            s.spawn(move || watch_project(s, project, config.debounce, rx));
-            project_cancel.push(tx);
-        }
-
-        if let Some(cancel) = cancel.into() {
-            let _ = cancel.recv();
-            info!("Stopping watchers");
-            for tx in &project_cancel {
-                if let Err(err) = tx.send(()) {
-                    error!(?err, "Failed to send cancel signal to project thread");
-                }
+    let mut project_cancel = Vec::with_capacity(config.project.len());
+    for project in config.project {
+        let (tx, rx) = crossbeam::channel::bounded(1);
+        std::thread::spawn(move || watch_project(project, config.debounce, rx));
+        project_cancel.push(tx);
+    }
+    if let Some(cancel) = cancel.into() {
+        let _ = cancel.recv();
+        info!("Stopping watchers");
+        for tx in &project_cancel {
+            if let Err(err) = tx.send(()) {
+                error!(?err, "Failed to send cancel signal to project thread");
             }
         }
-    });
+    }
 
     Ok(())
 }
