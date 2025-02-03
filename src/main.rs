@@ -59,14 +59,13 @@ fn main() -> anyhow::Result<()> {
             let h = std::thread::spawn(|| atune::watch(config, cancel_rx));
             match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
-                    for sig in signals.wait() {
+                    if let Some(sig) = signals.wait().next() {
                         println!("Signal ({sig}) received. Stopping...");
                         cancel_tx.send(()).unwrap();
                         h.join()
                             .expect("Failed to join watch thread")
                             .expect("Watch error");
                         signals.handle().close();
-                        break;
                     }
                 }
                 Err(err) => {
