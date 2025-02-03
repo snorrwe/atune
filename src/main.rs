@@ -65,6 +65,7 @@ fn main() -> anyhow::Result<()> {
                         h.join()
                             .expect("Failed to join watch thread")
                             .expect("Watch error");
+                        signals.handle().close();
                         break;
                     }
                 }
