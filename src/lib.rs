@@ -163,7 +163,7 @@ fn watch_project<'a>(
         sync.push((f, flags));
     }
 
-    let (tx, rx) = channel::bounded(128);
+    let (tx, rx) = channel::unbounded();
 
     for (p, _) in sync.iter() {
         let mut watcher =
