@@ -3,7 +3,8 @@ pub mod config;
 use crate::config::Config;
 use std::{
     collections::{HashMap, HashSet},
-    process,
+    io::Write,
+    process::{self, Stdio},
     time::Duration,
 };
 
@@ -36,15 +37,19 @@ fn execute_sync(s: &FileSync, flags: &[String], initialize: bool) -> anyhow::Res
     debug!("Running on_sync commands");
 
     let run = |cmd: &str| {
-        process::Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .env("ATUNE_SYNC_SRC", s.src.as_os_str())
-            .env("ATUNE_SYNC_DST", s.dst.as_os_str())
+        let mut proc = process::Command::new("sh")
+            .arg("-s")
+            .env("ATUNE_SYNC_SRC", s.src.to_string_lossy().as_ref())
+            .env("ATUNE_SYNC_DST", s.dst.to_string_lossy().as_ref())
+            .stdin(Stdio::piped())
             .spawn()
-            .context("Failed to spawn on_sync command")?
-            .wait()
-            .context("Failed to wait for child")
+            .context("Failed to spawn on_sync command")?;
+
+        let stdin = proc.stdin.as_mut().unwrap();
+        stdin
+            .write_all(cmd.as_bytes())
+            .context("Failed to pass script via stdin")?;
+        proc.wait().context("Failed to wait for process")
     };
 
     if initialize {
