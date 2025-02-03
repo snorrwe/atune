@@ -159,7 +159,7 @@ fn watch_project<'a>(
         let flags = if let Some(flags) = f.rsync_flags.as_deref() {
             shell_words::split(flags).context("Failed to split rsync flags")?
         } else {
-            Vec::new()
+            vec!["--delete".to_owned(), "-ra".to_owned()]
         };
         sync.push((f, flags));
     }
