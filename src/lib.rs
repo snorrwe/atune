@@ -220,16 +220,21 @@ pub fn watch(
     let mut project_cancel = Vec::with_capacity(config.project.len());
     for project in config.project {
         let (tx, rx) = crossbeam::channel::bounded(1);
-        std::thread::spawn(move || watch_project(project, config.debounce, rx));
-        project_cancel.push(tx);
+        let h = std::thread::spawn(move || watch_project(project, config.debounce, rx));
+        project_cancel.push((tx, h));
     }
     if let Some(cancel) = cancel.into() {
         let _ = cancel.recv();
         info!("Stopping watchers");
-        for tx in &project_cancel {
+        for (tx, _) in &project_cancel {
             if let Err(err) = tx.send(()) {
                 error!(?err, "Failed to send cancel signal to project thread");
             }
+        }
+    }
+    for (_, h) in project_cancel {
+        if let Err(err) = h.join() {
+            error!(?err, "Failed to join watch thread");
         }
     }
 
