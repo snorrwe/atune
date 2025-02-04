@@ -88,7 +88,7 @@
           copyToRoot = [ atune ];
           config = {
             Env = [
-              "ATUNE_CONFIG_PATH=/etc/atune/atune.toml"
+              "ATUNE_CONFIG_PATH=/etc/atune/atune.yaml"
             ];
           };
         };
