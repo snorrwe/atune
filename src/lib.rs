@@ -48,7 +48,11 @@ impl TryFrom<config::Project> for ParsedProject {
                 rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
                     shell_words::split(flags).context("Failed to split rsync flags")?
                 } else {
-                    vec!["--delete".to_owned(), "-ra".to_owned()]
+                    ["--delete", "-ra", "--progress"]
+                        .iter()
+                        .copied()
+                        .map(|x| x.to_owned())
+                        .collect()
                 },
                 on_sync: s.on_sync,
                 on_init: s.on_init,

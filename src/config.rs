@@ -57,14 +57,14 @@ mod tests {
     #[test]
     fn test_mixed_watch() {
         let toml = r#"
-debounce = "1s 30ms"
-[[project]]
-[[project.sync]]
-src = "asd"
-dst = "remote:~/asd"
+debounce: 1s 30ms
+project:
+  - sync:
+      - src: asd
+        dst: remote:~/asd
 "#;
 
-        let config: Config = toml::de::from_str(toml).unwrap();
+        let config: Config = serde_yaml::from_str(toml).unwrap();
 
         assert_eq!(config.project[0].sync[0].src.as_os_str(), "asd");
         assert_eq!(config.project[0].sync[0].dst.as_os_str(), "remote:~/asd");

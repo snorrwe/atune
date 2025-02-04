@@ -16,7 +16,7 @@ struct Args {
         long,
         short,
         env("ATUNE_CONFIG_PATH"),
-        default_value("./atune.toml"),
+        default_value("./atune.yaml"),
         value_name = "FILE"
     )]
     config: std::path::PathBuf,
@@ -47,8 +47,10 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     debug!(?args, "parsed arguments");
 
-    let config = std::fs::read_to_string(args.config).context("Failed to read config file")?;
-    let config = toml::from_str(&config).context("Failed to parse config file")?;
+    let config = std::fs::OpenOptions::new()
+        .open(args.config)
+        .context("Failed to open config file")?;
+    let config = serde_yaml::from_reader(config).context("Failed to parse config file")?;
 
     debug!(?config, "loaded config");
 
