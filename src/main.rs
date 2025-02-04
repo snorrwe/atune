@@ -48,6 +48,7 @@ fn main() -> anyhow::Result<()> {
     debug!(?args, "parsed arguments");
 
     let config = std::fs::OpenOptions::new()
+        .read(true)
         .open(args.config)
         .context("Failed to open config file")?;
     let config = serde_yaml::from_reader(config).context("Failed to parse config file")?;
