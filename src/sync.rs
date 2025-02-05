@@ -1,6 +1,4 @@
-pub mod config;
-
-use crate::config::Config;
+use crate::config::{self, Config};
 use std::{
     collections::{HashMap, HashSet},
     io::Write,

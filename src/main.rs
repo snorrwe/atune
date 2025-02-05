@@ -1,3 +1,6 @@
+mod config;
+mod sync;
+
 use anyhow::Context;
 use clap::Parser as _;
 use clap_derive::Parser;
@@ -69,7 +72,7 @@ fn main() -> anyhow::Result<()> {
         Command::Watch => {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
-            let h = std::thread::spawn(|| atune::watch(config, cancel_rx));
+            let h = std::thread::spawn(|| crate::sync::watch(config, cancel_rx));
             match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
                     if let Some(sig) = signals.wait().next() {
@@ -103,7 +106,7 @@ fn main() -> anyhow::Result<()> {
                     .context("Failed to find sync")?,
             );
 
-            atune::execute_sync(
+            crate::sync::execute_sync(
                 &sync.try_into().context("Failed to parse sync spec")?,
                 initialize,
             )

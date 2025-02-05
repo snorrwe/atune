@@ -1,6 +1,4 @@
-use std::{path::Path, time::Duration};
-
-use atune::config::{Config, FileSync, Project};
+use std::{io::Write, path::Path, process::Stdio, time::Duration};
 
 fn setup(root: &Path) {
     let test_1 = root.join("test_1");
@@ -17,37 +15,50 @@ fn setup(root: &Path) {
 
 #[test]
 fn test_watch_syncs() {
+    let cli = std::env!("CARGO_BIN_EXE_atune");
+
+    let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
+
     let dir = tempfile::Builder::new().prefix("atune_").tempdir().unwrap();
     setup(dir.path());
 
     let out = dir.path().join("out");
 
-    let config = Config {
-        projects: [(
-            "".to_owned(),
-            Project {
-                sync: vec![FileSync {
-                    src: dir.path().join("test_1"),
-                    dst: out.clone(),
-                    rsync_flags: Some(format!(
-                        r#"-av --rsync-path "mkdir -p {} && rsync""#,
-                        out.display()
-                    )),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            },
-        )]
-        .into(),
-        debounce: Duration::from_secs(0),
-    };
+    let config = format!(
+        r#"
+debounce: 0s
+projects:
+    test_1:
+      sync:
+        -
+            src: {}
+            dst: {}
+            rsync_flags: -av --rsync-path "mkdir -p {} && rsync"
+    "#,
+        dir.path().join("test_1").display(),
+        out.display(),
+        out.display()
+    );
 
-    let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
+    let config_file_path = dir.path().join("config.yaml");
+    let mut config_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&config_file_path)
+        .expect("Failed to open config");
+    config_file.write_all(config.as_bytes()).unwrap();
 
-    assert!(!out.exists());
-    let watch = std::thread::spawn(move || atune::watch(config, cancel_rx));
+    let mut proc = std::process::Command::new(&cli)
+        .arg("-c")
+        .arg(config_file_path.as_os_str())
+        .arg("watch")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to spawn atune");
 
-    std::thread::sleep(Duration::from_millis(500));
+    std::thread::sleep(Duration::from_millis(200));
 
     assert!(out.exists());
     assert!(out.is_dir());
@@ -56,6 +67,6 @@ fn test_watch_syncs() {
         assert!(f.exists());
         assert!(f.is_file());
     }
-    cancel_tx.send(()).unwrap();
-    let _ = watch.join().unwrap();
+
+    proc.kill().expect("Failed to kill atune");
 }
