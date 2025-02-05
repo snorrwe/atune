@@ -36,6 +36,28 @@ pub struct ParsedSync {
     pub on_init: Vec<String>,
 }
 
+impl TryFrom<config::FileSync> for ParsedSync {
+    type Error = anyhow::Error;
+    fn try_from(s: config::FileSync) -> Result<Self, Self::Error> {
+        Ok(ParsedSync {
+            src: s.src,
+            recursive: s.recursive,
+            dst: s.dst,
+            rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
+                shell_words::split(flags).context("Failed to split rsync flags")?
+            } else {
+                ["--delete", "-ra", "--progress"]
+                    .iter()
+                    .copied()
+                    .map(|x| x.to_owned())
+                    .collect()
+            },
+            on_sync: s.on_sync,
+            on_init: s.on_init,
+        })
+    }
+}
+
 impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
     type Error = anyhow::Error;
 
@@ -44,22 +66,7 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
     ) -> Result<Self, Self::Error> {
         let mut sync = Vec::with_capacity(value.sync.len());
         for s in value.sync {
-            sync.push(ParsedSync {
-                src: s.src,
-                recursive: s.recursive,
-                dst: s.dst,
-                rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
-                    shell_words::split(flags).context("Failed to split rsync flags")?
-                } else {
-                    ["--delete", "-ra", "--progress"]
-                        .iter()
-                        .copied()
-                        .map(|x| x.to_owned())
-                        .collect()
-                },
-                on_sync: s.on_sync,
-                on_init: s.on_init,
-            });
+            sync.push(s.try_into()?);
         }
         anyhow::Ok(Self {
             name,
@@ -70,7 +77,7 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 }
 
 #[tracing::instrument]
-fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
+pub fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
     let status = process::Command::new("rsync")
         .args(s.rsync_flags.iter())
         .arg(s.src.as_os_str())

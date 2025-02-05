@@ -28,6 +28,16 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     Watch,
+    SyncOnce {
+        /// Name of the project in the config
+        #[arg(long, short)]
+        project: String,
+        /// Index of the sync config inside the project
+        #[arg(long, short)]
+        sync_index: usize,
+        #[arg(long, short, default_value = "true")]
+        initialize: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -76,6 +86,28 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             Ok(())
+        }
+        Command::SyncOnce {
+            project,
+            sync_index,
+            initialize,
+        } => {
+            let mut config = config;
+            let sync = std::mem::take(
+                config
+                    .projects
+                    .remove(&project)
+                    .context("Failed to find project")?
+                    .sync
+                    .get_mut(sync_index)
+                    .context("Failed to find sync")?,
+            );
+
+            atune::execute_sync(
+                &sync.try_into().context("Failed to parse sync spec")?,
+                initialize,
+            )
+            .context("Failed to sync")
         }
     }
 }
