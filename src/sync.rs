@@ -152,7 +152,34 @@ fn sync_files(
     config_path: &std::path::Path,
     project: &str,
 ) {
+    let cmd = move || {
+        #[allow(clippy::zombie_processes)]
+        let mut cmd = std::process::Command::new(
+            std::env::args_os()
+                .next()
+                .expect("Executable name not found"),
+        );
+        cmd.arg("-c")
+            .arg(config_path)
+            .arg("sync-once")
+            .arg("--project")
+            .arg(project);
+        cmd
+    };
+
+    let mut in_progress = SyncProcesses::default();
     for f in files.iter() {
+        // the in_progress instance of SyncProcesses will clean up these processes
+        #[allow(clippy::zombie_processes)]
+        let proc = cmd()
+            .arg("--initialize")
+            .arg("--src")
+            .arg(f.src.as_os_str())
+            .spawn()
+            .expect("Failed to spawn sync command");
+
+        in_progress.0.push(proc);
+
         if let Err(err) = execute_sync(f, true) {
             error!(?err, "Failed to perform initial sync");
         }
@@ -164,8 +191,6 @@ fn sync_files(
         .collect::<HashMap<_, _>>();
 
     let mut to_sync = HashSet::new();
-    let mut in_progress = SyncProcesses::default();
-
     loop {
         let Ok(req) = rx.recv() else {
             break;
@@ -189,21 +214,11 @@ fn sync_files(
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
 
             // the in_progress instance of SyncProcesses will clean up these processes
-            #[allow(clippy::zombie_processes)]
-            let proc = std::process::Command::new(
-                std::env::args_os()
-                    .next()
-                    .expect("Executable name not found"),
-            )
-            .arg("-c")
-            .arg(config_path)
-            .arg("sync-once")
-            .arg("--project")
-            .arg(project)
-            .arg("--src")
-            .arg(a.as_os_str())
-            .spawn()
-            .expect("Failed to spawn sync command");
+            let proc = cmd()
+                .arg("--src")
+                .arg(a.as_os_str())
+                .spawn()
+                .expect("Failed to spawn sync command");
 
             in_progress.0.push(proc);
         }
@@ -226,7 +241,7 @@ fn watch_project(
     let (tx, rx) = channel::unbounded();
 
     let mut watcher =
-    notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
+        notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
     for p in project.sync.iter() {
         debug!(path=?p, "Registering");
         let mode = if p.recursive {
