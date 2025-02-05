@@ -1,11 +1,13 @@
-project:
-  - on_sync:
+projects:
+  foo:
+    on_sync:
       - echo some sync done
     sync:
       - src: /tmp/atune/
         dst: fragilis:~/atune/foo
         rsync_flags: -urltv --delete --progress
-  - sync:
+  bar:
+    sync:
       - src: /tmp/atune/bar
         dst: fragilis:~/atune/bar
         on_sync:
@@ -13,4 +15,3 @@ project:
           - echo bar
           - echo baz
           - ssh fragilis -C 'echo done > ~/atune/test.txt'
-

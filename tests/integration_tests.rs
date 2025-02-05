@@ -23,18 +23,22 @@ fn test_watch_syncs() {
     let out = dir.path().join("out");
 
     let config = Config {
-        project: vec![Project {
-            sync: vec![FileSync {
-                src: dir.path().join("test_1"),
-                dst: out.clone(),
-                rsync_flags: Some(format!(
-                    r#"-av --rsync-path "mkdir -p {} && rsync""#,
-                    out.display()
-                )),
+        projects: [(
+            "".to_owned(),
+            Project {
+                sync: vec![FileSync {
+                    src: dir.path().join("test_1"),
+                    dst: out.clone(),
+                    rsync_flags: Some(format!(
+                        r#"-av --rsync-path "mkdir -p {} && rsync""#,
+                        out.display()
+                    )),
+                    ..Default::default()
+                }],
                 ..Default::default()
-            }],
-            ..Default::default()
-        }],
+            },
+        )]
+        .into(),
         debounce: Duration::from_secs(0),
     };
 

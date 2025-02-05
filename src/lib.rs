@@ -21,6 +21,7 @@ struct SyncOneRequest {
 
 #[derive(Debug)]
 pub struct ParsedProject {
+    pub name: String,
     pub sync: Vec<ParsedSync>,
     pub on_sync: Vec<String>,
 }
@@ -35,10 +36,12 @@ pub struct ParsedSync {
     pub on_init: Vec<String>,
 }
 
-impl TryFrom<config::Project> for ParsedProject {
+impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
     type Error = anyhow::Error;
 
-    fn try_from(value: config::Project) -> Result<Self, Self::Error> {
+    fn try_from(
+        (name, value): (config::ProjectName, config::Project),
+    ) -> Result<Self, Self::Error> {
         let mut sync = Vec::with_capacity(value.sync.len());
         for s in value.sync {
             sync.push(ParsedSync {
@@ -59,6 +62,7 @@ impl TryFrom<config::Project> for ParsedProject {
             });
         }
         anyhow::Ok(Self {
+            name,
             sync,
             on_sync: value.on_sync,
         })
@@ -191,13 +195,16 @@ fn sync_files(
     info!("sync_files disconnected");
 }
 
-#[tracing::instrument(skip_all)]
-fn watch_project<'a>(
+#[tracing::instrument(skip(project, debounce, cancel))]
+fn watch_project(
+    name: String,
     project: config::Project,
     debounce: Duration,
     cancel: crossbeam::channel::Receiver<()>,
 ) -> anyhow::Result<()> {
-    let project: ParsedProject = project.try_into().context("Failed to parse config")?;
+    let project: ParsedProject = (name, project)
+        .try_into()
+        .context("Failed to parse config")?;
 
     let (tx, rx) = channel::unbounded();
 
@@ -254,10 +261,10 @@ pub fn watch(
     config: Config,
     cancel: impl Into<Option<crossbeam::channel::Receiver<()>>>,
 ) -> anyhow::Result<()> {
-    let mut project_cancel = Vec::with_capacity(config.project.len());
-    for project in config.project {
+    let mut project_cancel = Vec::with_capacity(config.projects.len());
+    for (name, project) in config.projects {
         let (tx, rx) = crossbeam::channel::bounded(1);
-        let h = std::thread::spawn(move || watch_project(project, config.debounce, rx));
+        let h = std::thread::spawn(move || watch_project(name, project, config.debounce, rx));
         project_cancel.push((tx, h));
     }
     if let Some(cancel) = cancel.into() {

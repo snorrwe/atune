@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::{path::PathBuf, time::Duration};
+
+pub type ProjectName = String;
 
 #[derive(Debug, Clone, serde_derive::Deserialize)]
 pub struct Config {
-    pub project: Vec<Project>,
+    pub projects: HashMap<ProjectName, Project>,
     #[serde(default = "default_debounce")]
     #[serde(deserialize_with = "duration_str::deserialize_duration")]
     pub debounce: Duration,
@@ -11,7 +14,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            project: Default::default(),
+            projects: Default::default(),
             debounce: default_debounce(),
         }
     }
@@ -58,16 +61,22 @@ mod tests {
     fn test_mixed_watch() {
         let yaml = r#"
 debounce: 1s 30ms
-project:
-  - sync:
-      - src: asd
-        dst: remote:~/asd
+projects:
+    asd:
+      sync:
+          - src: asd
+            dst: remote:~/asd
 "#;
 
         let config: Config = serde_yaml::from_str(yaml).unwrap();
 
-        assert_eq!(config.project[0].sync[0].src.as_os_str(), "asd");
-        assert_eq!(config.project[0].sync[0].dst.as_os_str(), "remote:~/asd");
+        assert_eq!(config.projects.len(), 1);
+
+        assert_eq!(config.projects["asd"].sync[0].src.as_os_str(), "asd");
+        assert_eq!(
+            config.projects["asd"].sync[0].dst.as_os_str(),
+            "remote:~/asd"
+        );
         assert_eq!(config.debounce, Duration::from_millis(1030));
     }
 }
