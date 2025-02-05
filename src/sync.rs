@@ -137,10 +137,29 @@ impl SyncProcesses {
                 Ok(Some(_)) => {}
                 Ok(None) => {
                     debug!("Killing in-progress sync");
-                    if let Err(err) = proc.kill() {
-                        error!(?err, "Failed to kill sync process");
+                    match proc.kill() {
+                        Err(err) => {
+                            error!(?err, "Failed to kill sync process");
+                        }
+                        Ok(_) => {
+                            // clean up
+                            if let Err(err) = proc.wait() {
+                                error!(?err, "Failed to wait for killed process");
+                            }
+                        }
                     }
                 }
+                Err(err) => {
+                    error!(?err, "Failed to wait for sync command");
+                }
+            }
+        }
+    }
+
+    pub fn wait(&mut self) {
+        for mut proc in self.0.drain(..) {
+            match proc.wait() {
+                Ok(_) => {}
                 Err(err) => {
                     error!(?err, "Failed to wait for sync command");
                 }
@@ -208,6 +227,8 @@ fn sync_files(
 
         if restart {
             in_progress.cancel();
+        } else {
+            in_progress.wait();
         }
 
         std::thread::sleep(debounce);
