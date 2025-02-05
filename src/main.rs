@@ -35,12 +35,24 @@ enum Command {
         /// Name of the project in the config
         #[arg(long, short)]
         project: String,
-        /// Index of the sync config inside the project
-        #[arg(long, short)]
-        sync_index: usize,
         #[arg(long, short, default_value = "true")]
         initialize: bool,
+
+        #[clap(flatten)]
+        sync_id: SyncId,
     },
+}
+
+#[derive(Debug, clap_derive::Args)]
+#[group(required = true, multiple = false)]
+struct SyncId {
+    /// Index of the sync config inside the project
+    #[arg(long)]
+    index: Option<usize>,
+
+    /// Name of the src file in the sync
+    #[arg(long)]
+    src: Option<std::path::PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -92,19 +104,36 @@ fn main() -> anyhow::Result<()> {
         }
         Command::SyncOnce {
             project,
-            sync_index,
+            sync_id:
+                SyncId {
+                    index: sync_index,
+                    src: sync_src,
+                },
             initialize,
         } => {
             let mut config = config;
-            let sync = std::mem::take(
-                config
-                    .projects
-                    .remove(&project)
-                    .context("Failed to find project")?
-                    .sync
-                    .get_mut(sync_index)
-                    .context("Failed to find sync")?,
-            );
+            let sync = match (sync_index, sync_src) {
+                (None, Some(sync_src)) => std::mem::take(
+                    config
+                        .projects
+                        .remove(&project)
+                        .context("Failed to find project")?
+                        .sync
+                        .iter_mut()
+                        .find(|s| s.src == sync_src)
+                        .context("Failed to find sync")?,
+                ),
+                (Some(sync_index), None) => std::mem::take(
+                    config
+                        .projects
+                        .remove(&project)
+                        .context("Failed to find project")?
+                        .sync
+                        .get_mut(sync_index)
+                        .context("Failed to find sync")?,
+                ),
+                _ => unreachable!(),
+            };
 
             crate::sync::execute_sync(
                 &sync.try_into().context("Failed to parse sync spec")?,
