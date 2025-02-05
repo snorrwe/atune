@@ -14,7 +14,7 @@ fn setup(root: &Path) {
 }
 
 #[test]
-fn test_watch_syncs() {
+fn test_watch_syncs_on_init() {
     let cli = std::env!("CARGO_BIN_EXE_atune");
 
     let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
