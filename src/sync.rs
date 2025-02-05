@@ -19,6 +19,7 @@ struct SyncOneRequest {
 
 #[derive(Debug)]
 pub struct ParsedProject {
+    #[allow(unused)]
     pub name: String,
     pub sync: Vec<ParsedSync>,
 }
@@ -114,6 +115,35 @@ pub fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Default)]
+struct SyncProcesses(Vec<process::Child>);
+
+impl Drop for SyncProcesses {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
+impl SyncProcesses {
+    pub fn cancel(&mut self) {
+        // cancel in-progress syncs
+        for mut proc in self.0.drain(..) {
+            match proc.try_wait() {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    debug!("Killing in-progress sync");
+                    if let Err(err) = proc.kill() {
+                        error!(?err, "Failed to kill sync process");
+                    }
+                }
+                Err(err) => {
+                    error!(?err, "Failed to wait for sync command");
+                }
+            }
+        }
+    }
+}
+
 #[tracing::instrument(skip_all)]
 fn sync_files(
     files: Vec<ParsedSync>,
@@ -134,7 +164,8 @@ fn sync_files(
         .collect::<HashMap<_, _>>();
 
     let mut to_sync = HashSet::new();
-    let mut in_progress: Vec<process::Child> = Vec::new();
+    let mut in_progress = SyncProcesses::default();
+
     loop {
         let Ok(req) = rx.recv() else {
             break;
@@ -144,21 +175,7 @@ fn sync_files(
             to_sync.insert(a.to_owned());
         }
 
-        // cancel in-progress syncs
-        for mut proc in in_progress.drain(..) {
-            match proc.try_wait() {
-                Ok(Some(_)) => {}
-                Ok(None) => {
-                    debug!("Killing in-progress sync");
-                    if let Err(err) = proc.kill() {
-                        error!(?err, "Failed to kill sync process");
-                    }
-                }
-                Err(err) => {
-                    error!(?err, "Failed to wait for sync command");
-                }
-            }
-        }
+        in_progress.cancel();
 
         std::thread::sleep(debounce);
         for req in rx.try_iter() {
@@ -170,6 +187,9 @@ fn sync_files(
         for a in to_sync.drain() {
             let s = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
+
+            // the in_progress instance of SyncProcesses will clean up these processes
+            #[allow(clippy::zombie_processes)]
             let proc = std::process::Command::new(
                 std::env::args_os()
                     .next()
@@ -185,7 +205,7 @@ fn sync_files(
             .spawn()
             .expect("Failed to spawn sync command");
 
-            in_progress.push(proc);
+            in_progress.0.push(proc);
         }
     }
     info!("sync_files disconnected");
