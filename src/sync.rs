@@ -225,9 +225,9 @@ fn watch_project(
 
     let (tx, rx) = channel::unbounded();
 
+    let mut watcher =
+    notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
     for p in project.sync.iter() {
-        let mut watcher =
-            notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
         debug!(path=?p, "Registering");
         let mode = if p.recursive {
             notify::RecursiveMode::Recursive
