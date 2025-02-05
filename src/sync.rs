@@ -22,6 +22,7 @@ pub struct ParsedProject {
     #[allow(unused)]
     pub name: String,
     pub sync: Vec<ParsedSync>,
+    pub restart: bool,
 }
 
 #[derive(Debug)]
@@ -66,7 +67,11 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
         for s in value.sync {
             sync.push(s.try_into()?);
         }
-        anyhow::Ok(Self { name, sync })
+        anyhow::Ok(Self {
+            name,
+            sync,
+            restart: value.restart,
+        })
     }
 }
 
@@ -151,6 +156,7 @@ fn sync_files(
     debounce: Duration,
     config_path: &std::path::Path,
     project: &str,
+    restart: bool,
 ) {
     let cmd = move || {
         #[allow(clippy::zombie_processes)]
@@ -200,7 +206,9 @@ fn sync_files(
             to_sync.insert(a.to_owned());
         }
 
-        in_progress.cancel();
+        if restart {
+            in_progress.cancel();
+        }
 
         std::thread::sleep(debounce);
         for req in rx.try_iter() {
@@ -263,6 +271,7 @@ fn watch_project(
             debounce,
             &config_path,
             project.name.as_str(),
+            project.restart,
         )
     });
 

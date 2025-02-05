@@ -23,6 +23,9 @@ impl Default for Config {
 #[derive(Default, Debug, Clone, serde_derive::Deserialize)]
 pub struct Project {
     pub sync: Vec<FileSync>,
+    /// cancel in-progress on_sync commands if a new change happens while they're running
+    #[serde(default = "default_true")]
+    pub restart: bool,
 }
 
 fn default_debounce() -> Duration {
@@ -34,7 +37,7 @@ pub struct FileSync {
     pub src: PathBuf,
     /// Watch src recursively. If src is a file then this flag is ignored
     /// default=true
-    #[serde(default = "default_recursive")]
+    #[serde(default = "default_true")]
     pub recursive: bool,
     pub dst: PathBuf,
     pub rsync_flags: Option<String>,
@@ -46,7 +49,7 @@ pub struct FileSync {
     pub on_init: Vec<String>,
 }
 
-fn default_recursive() -> bool {
+fn default_true() -> bool {
     true
 }
 
