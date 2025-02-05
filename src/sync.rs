@@ -178,6 +178,7 @@ fn sync_files(
     restart: bool,
 ) {
     let cmd = move || {
+        // the Drop impl of SyncProcesses will clean up these processes
         #[allow(clippy::zombie_processes)]
         let mut cmd = std::process::Command::new(
             std::env::args_os()
@@ -194,8 +195,6 @@ fn sync_files(
 
     let mut in_progress = SyncProcesses::default();
     for f in files.iter() {
-        // the in_progress instance of SyncProcesses will clean up these processes
-        #[allow(clippy::zombie_processes)]
         let proc = cmd()
             .arg("--initialize")
             .arg("--src")
@@ -242,7 +241,6 @@ fn sync_files(
             let s = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
 
-            // the in_progress instance of SyncProcesses will clean up these processes
             let proc = cmd()
                 .arg("--src")
                 .arg(a.as_os_str())
