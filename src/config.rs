@@ -23,9 +23,6 @@ impl Default for Config {
 #[derive(Default, Debug, Clone, serde_derive::Deserialize)]
 pub struct Project {
     pub sync: Vec<FileSync>,
-    /// commands to run after sync any sync
-    #[serde(default)]
-    pub on_sync: Vec<String>,
 }
 
 fn default_debounce() -> Duration {

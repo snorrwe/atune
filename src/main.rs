@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
 
     let config = std::fs::OpenOptions::new()
         .read(true)
-        .open(args.config)
+        .open(&args.config)
         .context("Failed to open config file")?;
     let config = serde_yaml::from_reader(config).context("Failed to parse config file")?;
 
@@ -84,7 +84,7 @@ fn main() -> anyhow::Result<()> {
         Command::Watch => {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
-            let h = std::thread::spawn(|| crate::sync::watch(config, cancel_rx));
+            let h = std::thread::spawn(|| crate::sync::watch(args.config, config, cancel_rx));
             match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
                     if let Some(sig) = signals.wait().next() {

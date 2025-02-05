@@ -14,4 +14,9 @@ projects:
           - echo foo
           - echo bar
           - echo baz
-          - ssh fragilis -C 'echo done > ~/atune/test.txt'
+          - |
+            set -x
+            ssh fragilis -C 'echo done > ~/atune/test.txt'
+          - |
+            set -x
+            sleep 5

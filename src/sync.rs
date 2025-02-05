@@ -21,7 +21,6 @@ struct SyncOneRequest {
 pub struct ParsedProject {
     pub name: String,
     pub sync: Vec<ParsedSync>,
-    pub on_sync: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -66,11 +65,7 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
         for s in value.sync {
             sync.push(s.try_into()?);
         }
-        anyhow::Ok(Self {
-            name,
-            sync,
-            on_sync: value.on_sync,
-        })
+        anyhow::Ok(Self { name, sync })
     }
 }
 
@@ -120,37 +115,12 @@ pub fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
 }
 
 #[tracing::instrument(skip_all)]
-fn on_sync(rx: channel::Receiver<()>, commands: Vec<String>) {
-    let on_sync = commands
-        .iter()
-        .map(|s| shell_words::split(s).unwrap())
-        .filter(|c| !c.is_empty())
-        .collect::<Vec<_>>();
-
-    loop {
-        let Ok(_) = rx.recv() else { break };
-        // collect all events received to batch updates
-        for _res in rx.try_iter() {}
-        debug!("running on_sync project commands");
-        for cmd in on_sync.iter() {
-            process::Command::new(cmd[0].as_str())
-                .args(&cmd[1..])
-                .spawn()
-                .expect("Failed to spawn on_sync command")
-                .wait()
-                .unwrap();
-        }
-        debug!("running on_sync project commands done");
-    }
-    info!("on_sync disconnected");
-}
-
-#[tracing::instrument(skip_all)]
 fn sync_files(
     files: Vec<ParsedSync>,
     rx: channel::Receiver<SyncOneRequest>,
-    tx: channel::Sender<()>,
     debounce: Duration,
+    config_path: &std::path::Path,
+    project: &str,
 ) {
     for f in files.iter() {
         if let Err(err) = execute_sync(f, true) {
@@ -164,37 +134,58 @@ fn sync_files(
         .collect::<HashMap<_, _>>();
 
     let mut to_sync = HashSet::new();
+    let mut in_progress: Vec<process::Child> = Vec::new();
     loop {
         let Ok(req) = rx.recv() else {
             break;
         };
         let path = &req.path;
-        for a in path.ancestors() {
-            if files.contains_key(a) {
-                to_sync.insert(a.to_owned());
-                break;
+        if let Some(a) = path.ancestors().find(|a| files.contains_key(*a)) {
+            to_sync.insert(a.to_owned());
+        }
+
+        // cancel in-progress syncs
+        for mut proc in in_progress.drain(..) {
+            match proc.try_wait() {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    debug!("Killing in-progress sync");
+                    if let Err(err) = proc.kill() {
+                        error!(?err, "Failed to kill sync process");
+                    }
+                }
+                Err(err) => {
+                    error!(?err, "Failed to wait for sync command");
+                }
             }
         }
+
         std::thread::sleep(debounce);
         for req in rx.try_iter() {
-            let path = &req.path;
-            for a in path.ancestors() {
-                if files.contains_key(a) {
-                    to_sync.insert(a.to_owned());
-                    break;
-                }
+            if let Some(a) = req.path.ancestors().find(|a| files.contains_key(*a)) {
+                to_sync.insert(a.to_owned());
             }
         }
 
         for a in to_sync.drain() {
             let s = files[&a];
             info!(changed=?path, src=?s.src, dst=?s.dst, "syncing");
-            if let Err(err) = execute_sync(s, false) {
-                error!(?err, "Failed to sync files");
-            }
-        }
-        if let Err(err) = tx.send(()) {
-            warn!(?err, "Failed to send on_sync event");
+            let proc = std::process::Command::new(
+                std::env::args_os()
+                    .next()
+                    .expect("Executable name not found"),
+            )
+            .arg("-c")
+            .arg(config_path)
+            .arg("sync-once")
+            .arg("--project")
+            .arg(project)
+            .arg("--src")
+            .arg(a.as_os_str())
+            .spawn()
+            .expect("Failed to spawn sync command");
+
+            in_progress.push(proc);
         }
     }
     info!("sync_files disconnected");
@@ -206,6 +197,7 @@ fn watch_project(
     project: config::Project,
     debounce: Duration,
     cancel: crossbeam::channel::Receiver<()>,
+    config_path: std::path::PathBuf,
 ) -> anyhow::Result<()> {
     let project: ParsedProject = (name, project)
         .try_into()
@@ -228,10 +220,16 @@ fn watch_project(
     }
 
     let (one_tx, one_rx) = channel::bounded(1024);
-    let (onsync_tx, onsync_rx) = channel::bounded(1024);
 
-    std::thread::spawn(move || sync_files(project.sync, one_rx, onsync_tx, debounce));
-    std::thread::spawn(move || on_sync(onsync_rx, project.on_sync));
+    std::thread::spawn(move || {
+        sync_files(
+            project.sync,
+            one_rx,
+            debounce,
+            &config_path,
+            project.name.as_str(),
+        )
+    });
 
     let mut files = HashSet::new();
     'rx: loop {
@@ -263,13 +261,17 @@ fn watch_project(
 
 /// Continously watch the config for changes as sync
 pub fn watch(
+    config_path: std::path::PathBuf,
     config: Config,
     cancel: impl Into<Option<crossbeam::channel::Receiver<()>>>,
 ) -> anyhow::Result<()> {
     let mut project_cancel = Vec::with_capacity(config.projects.len());
     for (name, project) in config.projects {
         let (tx, rx) = crossbeam::channel::bounded(1);
-        let h = std::thread::spawn(move || watch_project(name, project, config.debounce, rx));
+        let h = std::thread::spawn({
+            let config_path = config_path.to_owned();
+            move || watch_project(name, project, config.debounce, rx, config_path)
+        });
         project_cancel.push((tx, h));
     }
     if let Some(cancel) = cancel.into() {
