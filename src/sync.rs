@@ -1,6 +1,7 @@
 use crate::config::{self, CommandConfig, Config};
 use std::{
     collections::{HashMap, HashSet},
+    ffi::OsStr,
     io::Write,
     path::PathBuf,
     process::{self, Stdio},
@@ -14,7 +15,7 @@ use tracing::{debug, error, info, warn};
 
 #[derive(Debug)]
 struct SyncOneRequest {
-    path: std::path::PathBuf,
+    path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -23,6 +24,7 @@ pub struct ParsedProject {
     pub name: String,
     pub sync: Vec<ParsedSync>,
     pub restart: bool,
+    pub rsync: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -67,17 +69,18 @@ impl TryFrom<config::FileSync> for ParsedSync {
     }
 }
 
-impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
+impl TryFrom<(config::ProjectName, Option<PathBuf>, config::Project)> for ParsedProject {
     type Error = anyhow::Error;
 
     fn try_from(
-        (name, value): (config::ProjectName, config::Project),
+        (name, rsync, value): (config::ProjectName, Option<PathBuf>, config::Project),
     ) -> Result<Self, Self::Error> {
         let mut sync = Vec::with_capacity(value.sync.len());
         for s in value.sync {
             sync.push(s.try_into()?);
         }
         anyhow::Ok(Self {
+            rsync,
             name,
             sync,
             restart: value.restart,
@@ -86,8 +89,8 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 }
 
 #[tracing::instrument]
-pub fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
-    let status = process::Command::new("rsync")
+pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
+    let status = process::Command::new(rsync.as_deref().unwrap_or_else(|| OsStr::new("rsync")))
         .args(s.rsync_flags.iter())
         .arg(s.src.as_os_str())
         .arg(s.dst.as_os_str())
@@ -186,6 +189,7 @@ fn sync_files(
     config_path: &std::path::Path,
     project: &str,
     restart: bool,
+    rsync: Option<&OsStr>,
 ) {
     let cmd = move || {
         // the Drop impl of SyncProcesses will clean up these processes
@@ -214,7 +218,7 @@ fn sync_files(
 
         in_progress.0.push(proc);
 
-        if let Err(err) = execute_sync(f, true) {
+        if let Err(err) = execute_sync(f, rsync, true) {
             error!(?err, "Failed to perform initial sync");
         }
     }
@@ -269,9 +273,10 @@ fn watch_project(
     project: config::Project,
     debounce: Duration,
     cancel: crossbeam::channel::Receiver<()>,
-    config_path: std::path::PathBuf,
+    config_path: PathBuf,
+    rsync: Option<PathBuf>,
 ) -> anyhow::Result<()> {
-    let project: ParsedProject = (name, project)
+    let project: ParsedProject = (name, rsync, project)
         .try_into()
         .context("Failed to parse config")?;
 
@@ -301,6 +306,7 @@ fn watch_project(
             &config_path,
             project.name.as_str(),
             project.restart,
+            project.rsync.as_ref().map(|x| x.as_os_str()),
         )
     });
 
@@ -334,16 +340,18 @@ fn watch_project(
 
 /// Continously watch the config for changes as sync
 pub fn watch(
-    config_path: std::path::PathBuf,
+    config_path: PathBuf,
     config: Config,
     cancel: impl Into<Option<crossbeam::channel::Receiver<()>>>,
+    rsync: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let mut project_cancel = Vec::with_capacity(config.projects.len());
     for (name, project) in config.projects {
         let (tx, rx) = crossbeam::channel::bounded(1);
         let h = std::thread::spawn({
             let config_path = config_path.to_owned();
-            move || watch_project(name, project, config.debounce, rx, config_path)
+            let rsync = rsync.clone();
+            move || watch_project(name, project, config.debounce, rx, config_path, rsync)
         });
         project_cancel.push((tx, h));
     }

@@ -15,6 +15,7 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// Path to the atune config file
     #[arg(
         long,
         short,
@@ -23,6 +24,10 @@ struct Args {
         value_name = "FILE"
     )]
     config: std::path::PathBuf,
+
+    /// Path to rsync
+    #[arg(long, short, env("ATUNE_RSYNC"), default_value("rsync"))]
+    rsync: std::path::PathBuf,
 
     #[command(subcommand)]
     command: Command,
@@ -84,7 +89,9 @@ fn main() -> anyhow::Result<()> {
         Command::Watch => {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
-            let h = std::thread::spawn(|| crate::sync::watch(args.config, config, cancel_rx));
+            let h = std::thread::spawn(|| {
+                crate::sync::watch(args.config, config, cancel_rx, Some(args.rsync))
+            });
             match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
                     if let Some(sig) = signals.wait().next() {
@@ -137,6 +144,7 @@ fn main() -> anyhow::Result<()> {
 
             crate::sync::execute_sync(
                 &sync.try_into().context("Failed to parse sync spec")?,
+                Some(args.rsync.as_os_str()),
                 initialize,
             )
             .context("Failed to sync")
