@@ -50,15 +50,21 @@ pub struct FileSync {
     #[serde(default)]
     #[serde(deserialize_with = "deser_command_list")]
     pub on_sync: Vec<CommandConfig>,
-    /// commands to run after the first sync
-    #[serde(default)]
-    #[serde(deserialize_with = "deser_command_list")]
-    pub on_init: Vec<CommandConfig>,
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
 pub struct CommandConfig {
     pub command: String,
+    #[serde(default)]
+    pub on: CommandOn,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub enum CommandOn {
+    #[default]
+    Change,
+    /// Only run the given command at initialization
+    Init,
 }
 
 impl FromStr for CommandConfig {
@@ -67,6 +73,7 @@ impl FromStr for CommandConfig {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(CommandConfig {
             command: s.to_owned(),
+            ..Default::default()
         })
     }
 }
@@ -153,6 +160,8 @@ projects:
             on_sync:
                 - echo done
                 - command: echo hi
+                - command: echo hi
+                  on: Init
 "#;
 
         let config: Config = serde_yaml::from_str(yaml).unwrap();

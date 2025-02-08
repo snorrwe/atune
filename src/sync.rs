@@ -38,6 +38,16 @@ pub struct ParsedSync {
 impl TryFrom<config::FileSync> for ParsedSync {
     type Error = anyhow::Error;
     fn try_from(s: config::FileSync) -> Result<Self, Self::Error> {
+        let mut on_sync = Vec::new();
+        let mut on_init = Vec::new();
+
+        for c in s.on_sync {
+            match c.on {
+                config::CommandOn::Change => on_sync.push(c),
+                config::CommandOn::Init => on_init.push(c),
+            }
+        }
+
         Ok(ParsedSync {
             src: s.src,
             recursive: s.recursive,
@@ -51,8 +61,8 @@ impl TryFrom<config::FileSync> for ParsedSync {
                     .map(|x| x.to_owned())
                     .collect()
             },
-            on_sync: s.on_sync,
-            on_init: s.on_init,
+            on_sync,
+            on_init,
         })
     }
 }

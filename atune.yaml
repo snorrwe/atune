@@ -16,7 +16,9 @@ projects:
           - echo baz
           - |
             set -x
-            ssh fragilis -C 'echo done > ~/atune/test.txt'
-          - |
-            set -x
             sleep 5
+          - command: |
+              set -x
+              ssh fragilis -C 'echo done > ~/atune/test.txt'
+
+            on: Init
