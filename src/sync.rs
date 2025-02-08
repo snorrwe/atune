@@ -1,4 +1,4 @@
-use crate::config::{self, Config};
+use crate::config::{self, CommandConfig, Config};
 use std::{
     collections::{HashMap, HashSet},
     io::Write,
@@ -31,8 +31,8 @@ pub struct ParsedSync {
     pub recursive: bool,
     pub dst: PathBuf,
     pub rsync_flags: Vec<String>,
-    pub on_sync: Vec<String>,
-    pub on_init: Vec<String>,
+    pub on_sync: Vec<CommandConfig>,
+    pub on_init: Vec<CommandConfig>,
 }
 
 impl TryFrom<config::FileSync> for ParsedSync {
@@ -109,12 +109,12 @@ pub fn execute_sync(s: &ParsedSync, initialize: bool) -> anyhow::Result<()> {
     if initialize {
         debug!("Running init commands");
         for cmd in s.on_init.iter() {
-            run(cmd)?;
+            run(cmd.command.as_str())?;
         }
     }
 
     for cmd in s.on_sync.iter() {
-        run(cmd)?;
+        run(cmd.command.as_str())?;
     }
     debug!("Running on_sync commands done");
     Ok(())
