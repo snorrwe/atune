@@ -85,10 +85,18 @@
         dockerImage = pkgs.dockerTools.buildImage {
           name = "atune";
           tag = "latest";
-          copyToRoot = [ atune ];
+          copyToRoot = [
+            atune
+            pkgs.rsync
+            pkgs.openssh
+          ];
           config = {
             Env = [
               "ATUNE_CONFIG_PATH=/etc/atune/atune.yaml"
+            ];
+            Entrypoint = [
+              "atune"
+              "watch"
             ];
           };
         };
