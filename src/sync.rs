@@ -56,7 +56,7 @@ impl TryFrom<config::FileSync> for ParsedSync {
             rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
                 shell_words::split(flags).context("Failed to split rsync flags")?
             } else {
-                ["--delete", "-ra", "--progress"]
+                ["--delete", "-ra", "--progress", "--filter ':- .gitignore'"]
                     .iter()
                     .copied()
                     .map(|x| x.to_owned())
