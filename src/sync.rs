@@ -92,7 +92,7 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 #[tracing::instrument]
 pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
     if let Some(dst) = s.dst.as_ref() {
-        let status = process::Command::new(rsync.as_deref().unwrap_or_else(|| OsStr::new("rsync")))
+        let status = process::Command::new(rsync.unwrap_or_else(|| OsStr::new("rsync")))
             .args(s.rsync_flags.iter())
             .arg(s.src.as_os_str())
             .arg(dst.as_os_str())
