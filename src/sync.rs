@@ -333,7 +333,7 @@ pub fn watch(
     for (name, project) in config.projects {
         let (tx, rx) = crossbeam::channel::bounded(1);
         let h = std::thread::spawn({
-            let config_path = config_path.to_owned();
+            let config_path = config_path.clone();
             let rsync = rsync.clone();
             move || watch_project(name, project, config.debounce, rx, config_path, rsync)
         });
