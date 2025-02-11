@@ -36,7 +36,8 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     Watch,
-    SyncOnce {
+    /// Execute project sync once
+    SyncProject {
         /// Name of the project in the config
         #[arg(long, short)]
         project: String,
@@ -114,7 +115,7 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Command::SyncOnce {
+        Command::SyncProject {
             project,
             sync_id:
                 SyncId {

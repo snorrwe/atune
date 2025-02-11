@@ -36,6 +36,9 @@ pub struct ParsedSync {
     pub on_init: Vec<CommandConfig>,
 }
 
+pub static DEFAULT_RSYCN_FLAGS: &[&str] =
+    &["--delete", "-ra", "--progress", "--filter ':- .gitignore'"];
+
 impl TryFrom<config::FileSync> for ParsedSync {
     type Error = anyhow::Error;
     fn try_from(s: config::FileSync) -> Result<Self, Self::Error> {
@@ -56,7 +59,7 @@ impl TryFrom<config::FileSync> for ParsedSync {
             rsync_flags: if let Some(flags) = s.rsync_flags.as_deref() {
                 shell_words::split(flags).context("Failed to split rsync flags")?
             } else {
-                ["--delete", "-ra", "--progress", "--filter ':- .gitignore'"]
+                DEFAULT_RSYCN_FLAGS
                     .iter()
                     .copied()
                     .map(|x| x.to_owned())
@@ -201,7 +204,7 @@ fn sync_files(
         );
         cmd.arg("-c")
             .arg(config_path)
-            .arg("sync-once")
+            .arg("sync-project")
             .arg("--project")
             .arg(project);
         cmd
