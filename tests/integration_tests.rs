@@ -1,4 +1,28 @@
-use std::{io::Write, path::Path, process::Stdio, time::Duration};
+use std::{ffi::OsStr, io::Write, path::Path, process::Stdio, time::Duration};
+
+struct TestAtune(pub std::process::Child);
+
+impl Drop for TestAtune {
+    fn drop(&mut self) {
+        self.0.kill().unwrap();
+        self.0.wait().unwrap();
+    }
+}
+
+fn atune(config_file_path: &OsStr, command: &str) -> TestAtune {
+    let cli = std::env!("CARGO_BIN_EXE_atune");
+    let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
+    let proc = std::process::Command::new(&cli)
+        .arg("-c")
+        .arg(config_file_path)
+        .arg(command)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Failed to spawn atune");
+
+    TestAtune(proc)
+}
 
 fn setup(root: &Path) {
     let test_1 = root.join("test_1");
@@ -15,10 +39,6 @@ fn setup(root: &Path) {
 
 #[test]
 fn test_watch_syncs_on_init() {
-    let cli = std::env!("CARGO_BIN_EXE_atune");
-
-    let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
-
     let dir = tempfile::Builder::new().prefix("atune_").tempdir().unwrap();
     setup(dir.path());
 
@@ -49,14 +69,7 @@ projects:
         .expect("Failed to open config");
     config_file.write_all(config.as_bytes()).unwrap();
 
-    let mut proc = std::process::Command::new(&cli)
-        .arg("-c")
-        .arg(config_file_path.as_os_str())
-        .arg("watch")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn atune");
+    let _proc = atune(config_file_path.as_os_str(), "watch");
 
     std::thread::sleep(TIMEOUT);
 
@@ -67,17 +80,10 @@ projects:
         assert!(f.exists());
         assert!(f.is_file());
     }
-
-    proc.kill().expect("Failed to kill atune");
-    proc.wait().unwrap();
 }
 
 #[test]
 fn test_sync_once_on_init() {
-    let cli = std::env!("CARGO_BIN_EXE_atune");
-
-    let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
-
     let dir = tempfile::Builder::new().prefix("atune_").tempdir().unwrap();
     setup(dir.path());
 
@@ -108,16 +114,9 @@ projects:
         .expect("Failed to open config");
     config_file.write_all(config.as_bytes()).unwrap();
 
-    let mut proc = std::process::Command::new(&cli)
-        .arg("-c")
-        .arg(config_file_path.as_os_str())
-        .arg("sync-once")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn atune");
+    let mut proc = atune(config_file_path.as_os_str(), "sync-once");
 
-    proc.wait().unwrap();
+    proc.0.wait().unwrap();
 
     assert!(out.exists());
     assert!(out.is_dir());
@@ -132,10 +131,6 @@ const TIMEOUT: Duration = Duration::from_millis(200);
 
 #[test]
 fn test_watch() {
-    let cli = std::env!("CARGO_BIN_EXE_atune");
-
-    let cli = std::env::var("ATUNE_BIN").unwrap_or(cli.to_owned());
-
     let dir = tempfile::Builder::new().prefix("atune_").tempdir().unwrap();
     setup(dir.path());
 
@@ -166,14 +161,7 @@ projects:
         .expect("Failed to open config");
     config_file.write_all(config.as_bytes()).unwrap();
 
-    let mut proc = std::process::Command::new(&cli)
-        .arg("-c")
-        .arg(config_file_path.as_os_str())
-        .arg("watch")
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn atune");
+    let _proc = atune(config_file_path.as_os_str(), "watch");
 
     std::thread::sleep(TIMEOUT);
 
@@ -215,7 +203,4 @@ projects:
     std::thread::sleep(TIMEOUT);
     let fout = out.join("test.txt");
     assert!(!fout.exists());
-
-    proc.kill().expect("Failed to kill atune");
-    proc.wait().unwrap();
 }
