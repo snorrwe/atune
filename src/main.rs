@@ -81,9 +81,14 @@ fn main() -> anyhow::Result<()> {
         .read(true)
         .open(&args.config)
         .context("Failed to open config file")?;
-    let config = serde_yaml::from_reader(config).context("Failed to parse config file")?;
+    let mut config: config::Config =
+        serde_yaml::from_reader(config).context("Failed to parse config file")?;
 
-    debug!(?config, "loaded config");
+    for s in config.projects.values_mut().flat_map(|p| p.sync.iter_mut()) {
+        s.src = std::fs::canonicalize(&s.src)
+            .with_context(|| format!("Failed to canonicalize source path {}", s.src.display()))?;
+    }
+    debug!(?config, "Loaded config");
 
     match args.command {
         Command::Watch => {
@@ -119,17 +124,23 @@ fn main() -> anyhow::Result<()> {
             initialize,
         } => {
             let mut config = config;
+
             let sync = match (sync_index, sync_src) {
-                (None, Some(sync_src)) => std::mem::take(
-                    config
-                        .projects
-                        .remove(&project)
-                        .context("Failed to find project")?
-                        .sync
-                        .iter_mut()
-                        .find(|s| s.src == sync_src)
-                        .context("Failed to find sync")?,
-                ),
+                (None, Some(sync_src)) => {
+                    let sync_src = std::fs::canonicalize(&sync_src).unwrap();
+                    std::mem::take(
+                        config
+                            .projects
+                            .remove(&project)
+                            .with_context(|| format!("Failed to find project {project}"))?
+                            .sync
+                            .iter_mut()
+                            .find(|s| s.src == sync_src)
+                            .with_context(|| {
+                                format!("Failed to find sync {}", sync_src.display())
+                            })?,
+                    )
+                }
                 (Some(sync_index), None) => std::mem::take(
                     config
                         .projects
