@@ -24,7 +24,6 @@ pub struct ParsedProject {
     pub name: String,
     pub sync: Vec<ParsedSync>,
     pub restart: bool,
-    pub rsync: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -69,18 +68,17 @@ impl TryFrom<config::FileSync> for ParsedSync {
     }
 }
 
-impl TryFrom<(config::ProjectName, Option<PathBuf>, config::Project)> for ParsedProject {
+impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
     type Error = anyhow::Error;
 
     fn try_from(
-        (name, rsync, value): (config::ProjectName, Option<PathBuf>, config::Project),
+        (name, value): (config::ProjectName, config::Project),
     ) -> Result<Self, Self::Error> {
         let mut sync = Vec::with_capacity(value.sync.len());
         for s in value.sync {
             sync.push(s.try_into()?);
         }
         anyhow::Ok(Self {
-            rsync,
             name,
             sync,
             restart: value.restart,
@@ -189,7 +187,6 @@ fn sync_files(
     config_path: &std::path::Path,
     project: &str,
     restart: bool,
-    rsync: Option<&OsStr>,
 ) {
     let cmd = move || {
         // the Drop impl of SyncProcesses will clean up these processes
@@ -272,7 +269,7 @@ fn watch_project(
     config_path: PathBuf,
     rsync: Option<PathBuf>,
 ) -> anyhow::Result<()> {
-    let project: ParsedProject = (name, rsync, project)
+    let project: ParsedProject = (name, project)
         .try_into()
         .context("Failed to parse config")?;
 
@@ -302,7 +299,6 @@ fn watch_project(
             &config_path,
             project.name.as_str(),
             project.restart,
-            project.rsync.as_ref().map(|x| x.as_os_str()),
         )
     });
 
