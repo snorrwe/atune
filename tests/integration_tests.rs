@@ -69,6 +69,7 @@ projects:
     }
 
     proc.kill().expect("Failed to kill atune");
+    proc.wait().unwrap();
 }
 
 #[test]
@@ -125,8 +126,6 @@ projects:
         assert!(f.exists());
         assert!(f.is_file());
     }
-
-    proc.kill().expect("Failed to kill atune");
 }
 
 const TIMEOUT: Duration = Duration::from_millis(200);
@@ -218,4 +217,5 @@ projects:
     assert!(!fout.exists());
 
     proc.kill().expect("Failed to kill atune");
+    proc.wait().unwrap();
 }
