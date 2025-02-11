@@ -194,21 +194,7 @@ fn sync_files(
     project: &str,
     restart: bool,
 ) {
-    let cmd = move || {
-        // the Drop impl of SyncProcesses will clean up these processes
-        #[allow(clippy::zombie_processes)]
-        let mut cmd = std::process::Command::new(
-            std::env::args_os()
-                .next()
-                .expect("Executable name not found"),
-        );
-        cmd.arg("-c")
-            .arg(config_path)
-            .arg("sync-project")
-            .arg("--project")
-            .arg(project);
-        cmd
-    };
+    let cmd = move || sync_project_cmd(project, config_path);
 
     let mut in_progress = SyncProcesses::default();
     for f in files.iter() {
@@ -365,6 +351,44 @@ pub fn watch(
     for (_, h) in project_cancel {
         if let Err(err) = h.join() {
             error!(?err, "Failed to join watch thread");
+        }
+    }
+
+    Ok(())
+}
+
+fn sync_project_cmd(project: &str, config_path: &std::path::Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(
+        std::env::args_os()
+            .next()
+            .expect("Executable name not found"),
+    );
+    cmd.arg("-c")
+        .arg(config_path)
+        .arg("sync-project")
+        .arg("--project")
+        .arg(project);
+    cmd
+}
+
+pub fn sync_all_once(config_path: PathBuf, config: Config) -> anyhow::Result<()> {
+    let mut processes = Vec::with_capacity(config.projects.len());
+
+    for (name, project) in config.projects {
+        for f in project.sync.iter() {
+            let proc = sync_project_cmd(&name, &config_path)
+                .arg("--initialize")
+                .arg("--src")
+                .arg(f.src.as_os_str())
+                .spawn()
+                .context("Failed to spawn sync command")?;
+
+            processes.push(proc);
+        }
+    }
+    for mut p in processes {
+        if let Err(err) = p.wait() {
+            error!(?err, "Sync failed");
         }
     }
 

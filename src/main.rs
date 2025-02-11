@@ -9,6 +9,7 @@ use signal_hook::{
     consts::{SIGINT, SIGQUIT, SIGTERM},
     iterator::Signals,
 };
+use sync::sync_all_once;
 use tracing::{debug, warn};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
@@ -36,6 +37,8 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     Watch,
+    /// Perform all sync actions once, then exit
+    SyncOnce,
     /// Execute project sync once
     SyncProject {
         /// Name of the project in the config
@@ -115,6 +118,7 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Command::SyncOnce => sync_all_once(args.config, config),
         Command::SyncProject {
             project,
             sync_id:
