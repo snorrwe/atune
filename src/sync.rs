@@ -217,10 +217,6 @@ fn sync_files(
             .expect("Failed to spawn sync command");
 
         in_progress.0.push(proc);
-
-        if let Err(err) = execute_sync(f, rsync, true) {
-            error!(?err, "Failed to perform initial sync");
-        }
     }
 
     let files = files
