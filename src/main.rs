@@ -40,7 +40,7 @@ enum Command {
         /// Name of the project in the config
         #[arg(long, short)]
         project: String,
-        #[arg(long, short, default_value = "true")]
+        #[arg(long, short)]
         initialize: bool,
 
         #[clap(flatten)]
