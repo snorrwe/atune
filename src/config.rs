@@ -44,7 +44,8 @@ pub struct FileSync {
     /// default=true
     #[serde(default = "default_true")]
     pub recursive: bool,
-    pub dst: PathBuf,
+    /// If omitted, then no sync is performed, only the commands are run
+    pub dst: Option<PathBuf>,
     pub rsync_flags: Option<String>,
     /// commands to run after sync
     #[serde(default)]
@@ -146,6 +147,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::ffi::OsStrExt as _;
+
     use super::*;
 
     #[test]
@@ -170,8 +173,11 @@ projects:
 
         assert_eq!(config.projects["asd"].sync[0].src.as_os_str(), "asd");
         assert_eq!(
-            config.projects["asd"].sync[0].dst.as_os_str(),
-            "remote:~/asd"
+            config.projects["asd"].sync[0]
+                .dst
+                .as_ref()
+                .map(|x| x.as_os_str()),
+            Some(std::ffi::OsStr::from_bytes(b"remote:~/asd"))
         );
         assert_eq!(config.debounce, Duration::from_millis(1030));
     }

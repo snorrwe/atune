@@ -30,7 +30,7 @@ pub struct ParsedProject {
 pub struct ParsedSync {
     pub src: PathBuf,
     pub recursive: bool,
-    pub dst: PathBuf,
+    pub dst: Option<PathBuf>,
     pub rsync_flags: Vec<String>,
     pub on_sync: Vec<CommandConfig>,
     pub on_init: Vec<CommandConfig>,
@@ -88,24 +88,27 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 
 #[tracing::instrument]
 pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
-    let status = process::Command::new(rsync.as_deref().unwrap_or_else(|| OsStr::new("rsync")))
-        .args(s.rsync_flags.iter())
-        .arg(s.src.as_os_str())
-        .arg(s.dst.as_os_str())
-        .spawn()
-        .context("Failed to spawn sync")?
-        .wait()
-        .context("Failed to wait for rsync")?;
-
-    anyhow::ensure!(status.success(), "Failed to sync files");
+    if let Some(dst) = s.dst.as_ref() {
+        let status = process::Command::new(rsync.as_deref().unwrap_or_else(|| OsStr::new("rsync")))
+            .args(s.rsync_flags.iter())
+            .arg(s.src.as_os_str())
+            .arg(dst.as_os_str())
+            .spawn()
+            .context("Failed to spawn sync")?
+            .wait()
+            .context("Failed to wait for rsync")?;
+        anyhow::ensure!(status.success(), "Failed to sync files");
+    }
 
     debug!("Running on_sync commands");
 
     let run = |cmd: &str| {
-        let mut proc = process::Command::new("sh")
-            .arg("-s")
-            .env("ATUNE_SYNC_SRC", s.src.to_string_lossy().as_ref())
-            .env("ATUNE_SYNC_DST", s.dst.to_string_lossy().as_ref())
+        let mut proc = process::Command::new("sh");
+        proc.arg("-s").env("ATUNE_SYNC_SRC", s.src.as_os_str());
+        if let Some(dst) = s.dst.as_ref() {
+            proc.env("ATUNE_SYNC_DST", dst.as_os_str());
+        }
+        let mut proc = proc
             .stdin(Stdio::piped())
             .spawn()
             .context("Failed to spawn on_sync command")?;
