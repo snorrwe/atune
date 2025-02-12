@@ -37,7 +37,7 @@ pub struct ParsedSync {
 }
 
 pub static DEFAULT_RSYCN_FLAGS: &[&str] =
-    &["--delete", "-ra", "--progress", "--filter ':- .gitignore'"];
+    &["--delete", "-ra", "--progress", "--filter", ":- .gitignore"];
 
 impl TryFrom<config::FileSync> for ParsedSync {
     type Error = anyhow::Error;
