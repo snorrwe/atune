@@ -125,18 +125,21 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         proc.wait().context("Failed to wait for process")
     };
 
-    info!("Running on_sync commands");
-    if initialize {
-        debug!("Running init commands");
+    if initialize && !s.on_init.is_empty() {
+        info!("Running init commands");
         for cmd in s.on_init.iter() {
             run(cmd.command.as_str())?;
         }
+        info!("Running init commands done");
     }
 
-    for cmd in s.on_sync.iter() {
-        run(cmd.command.as_str())?;
+    if !s.on_sync.is_empty() {
+        info!("Running on_sync commands");
+        for cmd in s.on_sync.iter() {
+            run(cmd.command.as_str())?;
+        }
+        info!("Running on_sync commands done");
     }
-    info!("Running on_sync commands done");
     Ok(())
 }
 
