@@ -38,7 +38,10 @@ struct Args {
 enum Command {
     Watch,
     /// Perform all sync actions once, then exit
-    SyncOnce,
+    SyncOnce {
+        #[arg(long, short)]
+        no_run_commands: bool,
+    },
     /// Execute project sync once
     SyncProject {
         /// Name of the project in the config
@@ -118,7 +121,17 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Command::SyncOnce => sync_all_once(args.config, config),
+        Command::SyncOnce { no_run_commands } => {
+            let mut config = config;
+            if no_run_commands {
+                for (_, p) in config.projects.iter_mut() {
+                    for ele in p.sync.iter_mut() {
+                        ele.on_sync.clear();
+                    }
+                }
+            }
+            sync_all_once(args.config, config)
+        }
         Command::SyncProject {
             project,
             sync_id:
