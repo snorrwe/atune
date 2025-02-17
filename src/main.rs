@@ -52,6 +52,9 @@ enum Command {
 
         #[clap(flatten)]
         sync_id: SyncId,
+
+        #[arg(long, short)]
+        no_run_commands: bool,
     },
 }
 
@@ -130,7 +133,7 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            sync_all_once(args.config, config)
+            sync_all_once(no_run_commands, args.config, config)
         }
         Command::SyncProject {
             project,
@@ -140,8 +143,16 @@ fn main() -> anyhow::Result<()> {
                     src: sync_src,
                 },
             initialize,
+            no_run_commands,
         } => {
             let mut config = config;
+            if no_run_commands {
+                for (_, p) in config.projects.iter_mut() {
+                    for ele in p.sync.iter_mut() {
+                        ele.on_sync.clear();
+                    }
+                }
+            }
 
             let sync = match (sync_index, sync_src) {
                 (None, Some(sync_src)) => {

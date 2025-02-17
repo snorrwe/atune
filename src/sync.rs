@@ -374,12 +374,20 @@ fn sync_project_cmd(project: &str, config_path: &std::path::Path) -> std::proces
     cmd
 }
 
-pub fn sync_all_once(config_path: PathBuf, config: Config) -> anyhow::Result<()> {
+pub fn sync_all_once(
+    skip_commands: bool,
+    config_path: PathBuf,
+    config: Config,
+) -> anyhow::Result<()> {
     let mut processes = Vec::with_capacity(config.projects.len());
 
     for (name, project) in config.projects {
         for f in project.sync.iter() {
-            let proc = sync_project_cmd(&name, &config_path)
+            let mut cmd = sync_project_cmd(&name, &config_path);
+            if skip_commands {
+                cmd.arg("--no-run-commands");
+            }
+            let proc = cmd
                 .arg("--initialize")
                 .arg("--src")
                 .arg(f.src.as_os_str())
