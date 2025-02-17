@@ -89,8 +89,10 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
     }
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all, fields(src))]
 pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
+    tracing::Span::current().record("src", s.src.display().to_string());
+
     if let Some(dst) = s.dst.as_ref() {
         info!("Syncing file •");
         let status = process::Command::new(rsync.unwrap_or_else(|| OsStr::new("rsync")))
