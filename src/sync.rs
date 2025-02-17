@@ -92,6 +92,7 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 #[tracing::instrument]
 pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
     if let Some(dst) = s.dst.as_ref() {
+        info!("Syncing file •");
         let status = process::Command::new(rsync.unwrap_or_else(|| OsStr::new("rsync")))
             .args(s.rsync_flags.iter())
             .arg(s.src.as_os_str())
@@ -101,9 +102,8 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
             .wait()
             .context("Failed to wait for rsync")?;
         anyhow::ensure!(status.success(), "Failed to sync files");
+        info!("Syncing file done ✓");
     }
-
-    debug!("Running on_sync commands");
 
     let run = |cmd: &str| {
         let mut proc = process::Command::new("sh");
@@ -123,6 +123,7 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         proc.wait().context("Failed to wait for process")
     };
 
+    info!("Running on_sync commands");
     if initialize {
         debug!("Running init commands");
         for cmd in s.on_init.iter() {
@@ -133,7 +134,7 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
     for cmd in s.on_sync.iter() {
         run(cmd.command.as_str())?;
     }
-    debug!("Running on_sync commands done");
+    info!("Running on_sync commands done");
     Ok(())
 }
 
