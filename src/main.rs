@@ -10,6 +10,7 @@ use signal_hook::{
     iterator::Signals,
 };
 use sync::sync_all_once;
+use sync::DEFAULT_RSYCN_FLAGS;
 use tracing::{debug, warn};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
@@ -56,6 +57,8 @@ enum Command {
         #[arg(long, short)]
         no_run_commands: bool,
     },
+    /// Print the default args passed to rsync
+    RsyncArgs,
 }
 
 #[derive(Debug, clap_derive::Args)]
@@ -188,6 +191,10 @@ fn main() -> anyhow::Result<()> {
                 initialize,
             )
             .context("Failed to sync")
+        }
+        Command::RsyncArgs => {
+            println!("{}", DEFAULT_RSYCN_FLAGS.join(" "));
+            Ok(())
         }
     }
 }
