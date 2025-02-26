@@ -129,7 +129,9 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         info!("Running init commands");
         for cmd in s.on_init.iter() {
             let status = run(cmd.command.as_str())?;
-            anyhow::ensure!(status.success(), "Command failed")
+            if !cmd.continue_on_failure {
+                anyhow::ensure!(status.success(), "Command failed")
+            }
         }
         info!("Running init commands done");
     }
@@ -138,7 +140,9 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         info!("Running on_sync commands");
         for cmd in s.on_sync.iter() {
             let status = run(cmd.command.as_str())?;
-            anyhow::ensure!(status.success(), "Command failed")
+            if !cmd.continue_on_failure {
+                anyhow::ensure!(status.success(), "Command failed")
+            }
         }
         info!("Running on_sync commands done");
     }

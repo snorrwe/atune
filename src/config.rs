@@ -58,6 +58,8 @@ pub struct CommandConfig {
     pub command: String,
     #[serde(default)]
     pub on: CommandOn,
+    #[serde(default)]
+    pub continue_on_failure: bool,
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
