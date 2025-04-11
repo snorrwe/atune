@@ -106,7 +106,6 @@ fn main() -> anyhow::Result<()> {
     for s in config.projects.values_mut().flat_map(|p| p.sync.iter_mut()) {
         let src = std::mem::take(&mut s.src);
         s.src = std::fs::canonicalize(&src).unwrap_or(src);
-            // .with_context(|| format!("Failed to canonicalize source path {}", s.src.display()))?;
     }
     debug!(?config, "Loaded config");
 
