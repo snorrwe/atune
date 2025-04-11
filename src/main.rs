@@ -57,6 +57,12 @@ enum Command {
         #[arg(long, short)]
         no_run_commands: bool,
     },
+    /// Print the rsync command invoked by the project
+    ProjectRsync {
+        /// Name of the project in the config
+        #[arg(long, short)]
+        project: String,
+    },
     /// Print the default args passed to rsync
     RsyncArgs,
 }
@@ -98,8 +104,9 @@ fn main() -> anyhow::Result<()> {
         serde_yaml::from_reader(config).context("Failed to parse config file")?;
 
     for s in config.projects.values_mut().flat_map(|p| p.sync.iter_mut()) {
-        s.src = std::fs::canonicalize(&s.src)
-            .with_context(|| format!("Failed to canonicalize source path {}", s.src.display()))?;
+        let src = std::mem::take(&mut s.src);
+        s.src = std::fs::canonicalize(&src).unwrap_or(src);
+            // .with_context(|| format!("Failed to canonicalize source path {}", s.src.display()))?;
     }
     debug!(?config, "Loaded config");
 
@@ -194,6 +201,25 @@ fn main() -> anyhow::Result<()> {
         }
         Command::RsyncArgs => {
             println!("{}", DEFAULT_RSYCN_FLAGS.join(" "));
+            Ok(())
+        }
+        Command::ProjectRsync { project } => {
+            let project = &config
+                .projects
+                .get(&project)
+                .context("Failed to find project")?;
+            for sync in project.sync.iter() {
+                print!("{} -", sync.src.display(),);
+                match sync.rsync_flags.as_ref() {
+                    Some(flags) => println!("{flags}"),
+                    None => {
+                        for f in DEFAULT_RSYCN_FLAGS {
+                            print!(" {f}");
+                        }
+                        println!("");
+                    }
+                }
+            }
             Ok(())
         }
     }
