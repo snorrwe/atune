@@ -215,7 +215,7 @@ fn main() -> anyhow::Result<()> {
                         for f in DEFAULT_RSYCN_FLAGS {
                             print!(" {f}");
                         }
-                        println!("");
+                        println!();
                     }
                 }
             }
