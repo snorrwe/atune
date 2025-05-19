@@ -9,7 +9,7 @@ anyhow = "1.0.95"
 clap = { version = "4.5.27", features = ["derive", "env"] }
 clap_derive = "4.5.24"
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
-duration-str = "0.12.0"
+duration-str = "0.17.0"
 futures = "0.3.31"
 notify = { version = "8.0.0", features = ["crossbeam-channel"] }
 serde = "1.0.217"
