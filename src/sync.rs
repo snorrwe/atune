@@ -99,7 +99,7 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
             .arg(s.src.as_os_str())
             .arg(dst.as_os_str())
             .spawn()
-            .context("Failed to spawn sync")?
+            .context("Failed to spawn rsync")?
             .wait()
             .context("Failed to wait for rsync")?;
         anyhow::ensure!(status.success(), "Failed to sync files");
