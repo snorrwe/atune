@@ -36,7 +36,7 @@ pub struct ParsedSync {
     pub on_init: Vec<CommandConfig>,
 }
 
-pub static DEFAULT_RSYCN_FLAGS: &[&str] = &["--delete", "-ra", "--filter", ":- .gitignore"];
+pub static DEFAULT_RSYCN_FLAGS: &[&str] = &["--delete", "-raPhv", "--filter", ":- .gitignore"];
 
 impl TryFrom<config::FileSync> for ParsedSync {
     type Error = anyhow::Error;
