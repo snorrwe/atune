@@ -5,20 +5,20 @@ edition = "2021"
 license-file = "LICENSE"
 
 [dependencies]
-anyhow = "1.0.95"
-clap = { version = "4.5.27", features = ["derive", "env"] }
-clap_derive = "4.5.24"
+anyhow = "1.0.98"
+clap = { version = "4.5.39", features = ["derive", "env"] }
+clap_derive = "4.5.32"
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 duration-str = "0.17.0"
 futures = "0.3.31"
 notify = { version = "8.0.0", features = ["crossbeam-channel"] }
-serde = "1.0.217"
-serde_derive = "1.0.217"
+serde = "1.0.219"
+serde_derive = "1.0.219"
 serde_yaml = "0.9.34"
 shell-words = "1.1.0"
-signal-hook = "0.3.17"
+signal-hook = "0.3.18"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 [dev-dependencies]
-tempfile = "3.16.0"
+tempfile = "3.20.0"
