@@ -181,6 +181,7 @@
             just
             git-cliff
             lldb
+            rust-analyzer
           ];
         };
       }
