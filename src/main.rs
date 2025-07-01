@@ -17,15 +17,10 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Path to the atune config file
-    #[arg(
-        long,
-        short,
-        env("ATUNE_CONFIG_PATH"),
-        default_value("./atune.yaml"),
-        value_name = "FILE"
-    )]
-    config: std::path::PathBuf,
+    /// Path to the atune config file.
+    /// If omitted, then all parent directories are scanned for an `atune.yaml` file
+    #[arg(long, short, env("ATUNE_CONFIG_PATH"), value_name = "FILE")]
+    config: Option<std::path::PathBuf>,
 
     /// Path to rsync
     #[arg(long, short, env("ATUNE_RSYNC"), default_value("rsync"))]
@@ -96,9 +91,33 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     debug!(?args, "parsed arguments");
 
+    let mut fname = None;
+    match args.config {
+        Some(x) => fname = Some(x),
+        None => {
+            for dir in std::path::Path::new(".")
+                .canonicalize()
+                .unwrap()
+                .ancestors()
+            {
+                let f = dir.join("atune.yaml");
+                if f.exists() {
+                    fname = Some(f);
+                    break;
+                }
+            }
+            if fname.is_none() {
+                anyhow::bail!(
+                    "Failed to find atune.yaml config file in any of the parent directories."
+                );
+            }
+        }
+    };
+    let fname = fname.unwrap();
+
     let config = std::fs::OpenOptions::new()
         .read(true)
-        .open(&args.config)
+        .open(&fname)
         .context("Failed to open config file")?;
     let mut config: config::Config =
         serde_yaml::from_reader(config).context("Failed to parse config file")?;
@@ -114,7 +133,7 @@ fn main() -> anyhow::Result<()> {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
             let h = std::thread::spawn(|| {
-                crate::sync::watch(args.config, config, cancel_rx, Some(args.rsync))
+                crate::sync::watch(fname, config, cancel_rx, Some(args.rsync))
             });
             match Signals::new([SIGINT, SIGTERM, SIGQUIT]) {
                 Ok(mut signals) => {
@@ -142,7 +161,7 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            sync_all_once(no_run_commands, args.config, config)
+            sync_all_once(no_run_commands, fname, config)
         }
         Command::SyncProject {
             project,
