@@ -28,6 +28,7 @@ pub struct ParsedProject {
 
 #[derive(Debug)]
 pub struct ParsedSync {
+    pub enabled: bool,
     pub src: PathBuf,
     pub recursive: bool,
     pub dst: Option<PathBuf>,
@@ -52,6 +53,7 @@ impl TryFrom<config::FileSync> for ParsedSync {
         }
 
         Ok(ParsedSync {
+            enabled: s.enabled,
             src: s.src,
             recursive: s.recursive,
             dst: s.dst,
@@ -280,7 +282,7 @@ fn watch_project(
 
     let mut watcher =
         notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
-    for p in project.sync.iter() {
+    for p in project.sync.iter().filter(|p| p.enabled) {
         debug!(path=?p, "Registering");
         let mode = if p.recursive {
             notify::RecursiveMode::Recursive

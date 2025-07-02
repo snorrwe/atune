@@ -39,6 +39,10 @@ fn default_debounce() -> Duration {
 
 #[derive(Default, Debug, Clone, serde_derive::Deserialize)]
 pub struct FileSync {
+    /// wether this sync is enabled. if disabled, then this sync is ignored
+    /// default=true
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     pub src: PathBuf,
     /// Watch src recursively. If src is a file then this flag is ignored
     /// default=true
