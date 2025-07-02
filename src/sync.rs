@@ -282,7 +282,11 @@ fn watch_project(
 
     let mut watcher =
         notify::recommended_watcher(tx.clone()).context("Failed to initialize watcher")?;
-    for p in project.sync.iter().filter(|p| p.enabled) {
+
+    let mut sync = project.sync;
+    sync.retain(|p| p.enabled);
+
+    for p in sync.iter() {
         debug!(path=?p, "Registering");
         let mode = if p.recursive {
             notify::RecursiveMode::Recursive
@@ -298,7 +302,7 @@ fn watch_project(
 
     std::thread::spawn(move || {
         sync_files(
-            project.sync,
+            sync,
             one_rx,
             debounce,
             &config_path,
