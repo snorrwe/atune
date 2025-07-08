@@ -1,6 +1,8 @@
 mod config;
 mod sync;
 
+use std::process;
+
 use anyhow::Context;
 use clap::Parser as _;
 use clap_derive::Parser;
@@ -32,6 +34,8 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Open the config file in your $EDITOR
+    Edit,
     Watch,
     /// Perform all sync actions once, then exit
     SyncOnce {
@@ -129,6 +133,17 @@ fn main() -> anyhow::Result<()> {
     debug!(?config, "Loaded config");
 
     match args.command {
+        Command::Edit => {
+            let editor = std::env::var("EDITOR")
+                .or_else(|_| std::env::var("VISUAL"))
+                .context("Editor could not be determined. Set the EDITOR environment variable")?;
+            let mut cmd = process::Command::new(editor.as_str())
+                .arg(&fname)
+                .spawn()
+                .context("Failed to run editor")?;
+            cmd.wait().context("Failed to wait for editor")?;
+            Ok(())
+        }
         Command::Watch => {
             let (cancel_tx, cancel_rx) = crossbeam::channel::bounded(1);
 
