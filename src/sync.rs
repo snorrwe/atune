@@ -109,7 +109,9 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
     }
 
     let run = |cmd: &str| {
-        let mut proc = xshell::cmd!(sh, "sh -s").env("ATUNE_SYNC_SRC", s.src.as_os_str());
+        let mut proc = xshell::cmd!(sh, "sh -s")
+            .env("ATUNE_SYNC_SRC", s.src.as_os_str())
+            .quiet();
         if let Some(dst) = s.dst.as_ref() {
             proc = proc.env("ATUNE_SYNC_DST", dst.as_os_str());
         }
