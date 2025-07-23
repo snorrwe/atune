@@ -2,9 +2,8 @@ use crate::config::{self, CommandConfig, Config};
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
-    io::Write,
     path::PathBuf,
-    process::{self, Stdio},
+    process,
     time::Duration,
 };
 
@@ -94,44 +93,36 @@ impl TryFrom<(config::ProjectName, config::Project)> for ParsedProject {
 pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> anyhow::Result<()> {
     tracing::Span::current().record("src", s.src.display().to_string());
 
+    let sh = xshell::Shell::new().context("Failed to init shell")?;
+
     if let Some(dst) = s.dst.as_ref() {
         info!("Syncing file •");
-        let status = process::Command::new(rsync.unwrap_or_else(|| OsStr::new("rsync")))
-            .args(s.rsync_flags.iter())
-            .arg(s.src.as_os_str())
-            .arg(dst.as_os_str())
-            .spawn()
-            .context("Failed to spawn rsync")?
-            .wait()
-            .context("Failed to wait for rsync")?;
-        anyhow::ensure!(status.success(), "Failed to sync files");
+
+        let rsync = rsync.unwrap_or_else(|| OsStr::new("rsync"));
+        let rsync_flags = s.rsync_flags.iter();
+        let src = s.src.as_os_str();
+        let dst = dst.as_os_str();
+
+        let cmd = xshell::cmd!(sh, "{rsync} {rsync_flags...} {src} {dst}");
+        cmd.run().context("Failed to sync files")?;
         info!("Syncing file done ✓");
     }
 
     let run = |cmd: &str| {
-        let mut proc = process::Command::new("sh");
-        proc.arg("-s").env("ATUNE_SYNC_SRC", s.src.as_os_str());
+        let mut proc = xshell::cmd!(sh, "sh -s").env("ATUNE_SYNC_SRC", s.src.as_os_str());
         if let Some(dst) = s.dst.as_ref() {
-            proc.env("ATUNE_SYNC_DST", dst.as_os_str());
+            proc = proc.env("ATUNE_SYNC_DST", dst.as_os_str());
         }
-        let mut proc = proc
-            .stdin(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn on_sync command")?;
-
-        let stdin = proc.stdin.as_mut().unwrap();
-        stdin
-            .write_all(cmd.as_bytes())
-            .context("Failed to pass script via stdin")?;
-        proc.wait().context("Failed to wait for process")
+        proc.stdin(cmd.as_bytes()).run().context("Command failed")
     };
 
     if initialize && !s.on_init.is_empty() {
         info!("Running init commands");
         for cmd in s.on_init.iter() {
-            let status = run(cmd.command.as_str())?;
+            let res = run(cmd.command.as_str());
+            debug!(?res, "Command result");
             if !cmd.continue_on_failure {
-                anyhow::ensure!(status.success(), "Command failed")
+                res?;
             }
         }
         info!("Running init commands done");
@@ -140,9 +131,10 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
     if !s.on_sync.is_empty() {
         info!("Running on_sync commands");
         for cmd in s.on_sync.iter() {
-            let status = run(cmd.command.as_str())?;
+            let res = run(cmd.command.as_str());
+            debug!(?res, "Command result");
             if !cmd.continue_on_failure {
-                anyhow::ensure!(status.success(), "Command failed")
+                res?;
             }
         }
         info!("Running on_sync commands done");
