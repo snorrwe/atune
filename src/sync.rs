@@ -104,7 +104,7 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         let dst = dst.as_os_str();
 
         let cmd = xshell::cmd!(sh, "{rsync} {rsync_flags...} {src} {dst}");
-        cmd.run().context("Failed to sync files")?;
+        cmd.run()?;
         info!("Syncing file done ✓");
     }
 
