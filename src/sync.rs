@@ -113,9 +113,9 @@ pub fn execute_sync(s: &ParsedSync, rsync: Option<&OsStr>, initialize: bool) -> 
         if let Some(dst) = s.dst.as_ref() {
             proc = proc.env("ATUNE_SYNC_DST", dst.as_os_str());
         }
-        proc.stdin(cmd.as_bytes())
-            .run()
-            .with_context(|| format!("Command failed\n({cmd})"))
+        let res = proc.stdin(cmd.as_bytes()).run();
+        anyhow::ensure!(res.is_ok(), "Command failed\n{cmd}");
+        Ok(())
     };
 
     if initialize && !s.on_init.is_empty() {
