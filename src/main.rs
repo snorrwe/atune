@@ -1,7 +1,7 @@
 mod config;
 mod sync;
 
-use std::process;
+use std::{collections::HashSet, process};
 
 use anyhow::Context;
 use clap::Parser as _;
@@ -41,6 +41,10 @@ enum Command {
     SyncOnce {
         #[arg(long, short)]
         no_run_commands: bool,
+        /// Name of the project(s) to sync in the config
+        /// If omitted, then all projects are synced
+        #[arg(long, short)]
+        project: Option<Vec<String>>,
     },
     /// Execute project sync once
     SyncProject {
@@ -167,7 +171,13 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Command::SyncOnce { no_run_commands } => {
+        Command::SyncOnce {
+            no_run_commands,
+            project,
+        } => {
+            if let Some(project_filter) = project.map(|p| p.into_iter().collect::<HashSet<_>>()) {
+                config.projects.retain(|k, _| project_filter.contains(k));
+            }
             let mut config = config;
             if no_run_commands {
                 for (_, p) in config.projects.iter_mut() {
